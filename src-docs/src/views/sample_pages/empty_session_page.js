@@ -700,11 +700,36 @@ export const EmptySessionPage = ({
                 </div>
               </button>
 
-              {/* Card 6: Open a page */}
-              <button type="button" className="emptySessionPage__favoritePanel emptySessionPage__favoritePanel--action" onClick={() => onOpenPage('new-tab', 'New Tab')}>
-                <OuiIcon type="plusInCircle" size="l" color="subdued" />
-                <span className="emptySessionPage__openPageLabel">Open a page</span>
-              </button>
+              {/* Card 6: Open a page — chips are individually clickable */}
+              <div className="emptySessionPage__favoritePanel emptySessionPage__favoritePanel--openPage">
+                <div className="emptySessionPage__favoritePanelTitle">Open another page</div>
+                <div className="emptySessionPage__openPageChips">
+                  <button
+                    type="button"
+                    className="emptySessionPage__openPageChip"
+                    onClick={() => onOpenPage('query-set-comparison', 'Query Analysis')}>
+                    Query Analysis
+                  </button>
+                  <button
+                    type="button"
+                    className="emptySessionPage__openPageChip"
+                    onClick={() => onOpenPage('query-set-comparison', 'Query Set Comparison')}>
+                    Query Set Comparison
+                  </button>
+                  <button
+                    type="button"
+                    className="emptySessionPage__openPageChip"
+                    onClick={() => onOpenPage('query-set-comparison', 'Search Evaluation')}>
+                    Search Evaluation
+                  </button>
+                  <button
+                    type="button"
+                    className="emptySessionPage__openPageChip"
+                    onClick={() => onOpenPage('query-set-comparison', 'Hybrid Optimizer')}>
+                    Hybrid Optimizer
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

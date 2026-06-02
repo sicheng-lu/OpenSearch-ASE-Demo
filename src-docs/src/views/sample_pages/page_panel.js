@@ -250,7 +250,7 @@ export const PagePanel = ({
     const PageComponent = pageEntry.component;
 
     // Pages that have their own header — skip DetailPageHeader
-    const PAGES_WITH_OWN_HEADER = new Set(['discover-log', 'discover-log-correlated', 'discover-metric', 'app-perf-services']);
+    const PAGES_WITH_OWN_HEADER = new Set(['discover-log', 'discover-log-correlated', 'discover-metric', 'app-perf-services', 'query-set-comparison']);
     const skipHeader = PAGES_WITH_OWN_HEADER.has(activeTab.pageKey);
 
     // List pages that need onSelectPage callback

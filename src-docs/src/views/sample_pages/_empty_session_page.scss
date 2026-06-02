@@ -176,81 +176,37 @@
   }
 }
 
-.emptySessionPage__favoritePanel--action {
+.emptySessionPage__favoritePanel--openPage {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  gap: 12px;
+  border-style: dashed;
+  border-color: lightOrDarkTheme(rgba($ouiColorPrimary, 0.35), rgba($ouiColorPrimary, 0.45));
+}
+
+.emptySessionPage__openPageChips {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.emptySessionPage__openPageChip {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid lightOrDarkTheme(rgba(13, 48, 87, 0.12), rgba(207, 228, 247, 0.12));
+  background-color: transparent;
+  font-family: inherit;
+  font-size: $ouiFontSizeS;
+  color: $ouiTextSubduedColor;
   cursor: pointer;
   appearance: none;
-  border-style: dashed;
-  transition: background-color 200ms ease, border-color 200ms ease;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
 
   &:hover {
     background-color: rgba($ouiColorPrimary, 0.08);
-    border-color: rgba($ouiColorPrimary, 0.3);
-  }
-}
-
-.emptySessionPage__openPageLabel {
-  font-family: 'IBM Plex Mono', $ouiCodeFontFamily;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  color: lightOrDarkTheme(rgba(13, 48, 87, 0.55), rgba(207, 228, 247, 0.55));
-}
-
-// ─── Open a page card ───────────────────────────────────────
-.emptySessionPage__openPageCard {
-  display: flex;
-  flex-direction: column;
-  border: 1px dashed lightOrDarkTheme(rgba(13, 48, 87, 0.18), rgba(207, 228, 247, 0.18));
-  border-radius: 0;
-  padding: 16px;
-  gap: 12px;
-}
-
-.emptySessionPage__openPageHeader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: 'IBM Plex Mono', $ouiCodeFontFamily;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: lightOrDarkTheme(rgba(13, 48, 87, 0.55), rgba(207, 228, 247, 0.55));
-}
-
-.emptySessionPage__openPageGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.emptySessionPage__openPageItem {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px 8px;
-  border: 1px solid lightOrDarkTheme(rgba(13, 48, 87, 0.08), rgba(207, 228, 247, 0.08));
-  background-color: lightOrDarkTheme(rgba(255, 255, 255, 0.6), rgba(16, 62, 110, 0.3));
-  cursor: pointer;
-  font-size: $ouiFontSizeXS;
-  font-weight: 500;
-  color: $ouiTextColor;
-  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
-  appearance: none;
-
-  &:hover {
-    background-color: lightOrDarkTheme(rgba(255, 255, 255, 0.9), rgba($ouiColorPrimary, 0.12));
-    border-color: rgba($ouiColorPrimary, 0.3);
-    transform: translateY(-1px);
+    border-color: rgba($ouiColorPrimary, 0.4);
     color: $ouiColorPrimary;
+    transform: translateY(-1px);
   }
 }
 

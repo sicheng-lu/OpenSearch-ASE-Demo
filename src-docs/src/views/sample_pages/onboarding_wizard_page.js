@@ -106,7 +106,7 @@ const STEPS = [
     mainStep: 2,
     subStep: 1,
     question:
-      'Want to add semantic search? Here are your detected fields with my enrichment suggestions \u2014 the recommended ones are pre-selected. Set a language and model type per field, or skip this step.',
+      'Want to add semantic search? Based on your data, here\u2019s what I suggest enriching. You can confirm, edit the details, or skip.',
     optionType: 'enrich',
     options: [], // dynamically populated based on inferred fields
     dynamicOptions: true,
@@ -153,7 +153,7 @@ const STEPS = [
       'Your search is live! I\u2019ve created the collection, index, and pipeline, and indexed your data. Try a search or open the dashboard.',
     optionType: 'chips',
     options: [
-      { key: 'open-dashboard', label: 'Open dashboard', primary: true },
+      { key: 'open-dashboard', label: 'Continue', primary: true },
       { key: 'try-query', label: 'Try a search query' },
     ],
     confirmation: () => 'Setup complete. Your search tool is ready to use.',
@@ -293,6 +293,16 @@ const getEnrichedFieldNames = (config) =>
   config && typeof config === 'object'
     ? Object.keys(config).filter((name) => config[name] && config[name].enrich)
     : [];
+
+// Short rationale for the suggested enrichment, shown in the summary view.
+const getSuggestionReason = (useCase) => {
+  const suggested = getDetectedFields(useCase).filter(isSuggestedField);
+  if (suggested.length === 0) {
+    return 'No text fields were detected, so semantic enrichment isn\u2019t recommended for this data.';
+  }
+  const names = suggested.map((f) => f.name).join(', ');
+  return `Your text fields (${names}) carry the natural-language meaning users search for, so I suggest enriching them with a dense model in English. Keyword, date, and numeric fields are better left for exact filtering.`;
+};
 
 // Resolve the model name for a field's config.
 const resolveModelName = (cfg) => {
@@ -639,11 +649,57 @@ const SemanticConfigPanel = ({ enrichConfig, useCase }) => {
   );
 };
 
+const BenchmarkTable = ({ activeStrategy }) => (
+  <>
+    <OuiText size="xs" color="subdued">
+      <strong>Expected retrieval performance</strong>
+    </OuiText>
+    <OuiSpacer size="xs" />
+    <OuiText size="xs" color="subdued">
+      <p style={{ margin: 0 }}>
+        Illustrative values; actual results vary by workload. Your configuration
+        maps to the highlighted strategy.
+      </p>
+    </OuiText>
+    <OuiSpacer size="s" />
+    <table className="onboardWizard__benchTable">
+      <thead>
+        <tr>
+          <th>Strategy</th>
+          <th>NDCG@10</th>
+          <th>P99 (ms)</th>
+          <th>Index</th>
+          <th>Cost</th>
+        </tr>
+      </thead>
+      <tbody>
+        {BENCHMARK_ROWS.map((row) => (
+          <tr
+            key={row.key}
+            className={row.key === activeStrategy ? 'onboardWizard__benchRow--active' : undefined}>
+            <td>
+              {row.strategy}
+              {row.key === activeStrategy && (
+                <span className="onboardWizard__benchYou">Your setup</span>
+              )}
+            </td>
+            <td>{row.ndcg}</td>
+            <td>{row.p99}</td>
+            <td>{row.indexSize}</td>
+            <td>{row.cost}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </>
+);
+
 const ReviewSummaryPanel = ({ useCase, importOption, enrichConfig }) => {
   const template = INDEX_TEMPLATES[useCase] || INDEX_TEMPLATES['custom'];
   const source = IMPORT_SOURCE_META[importOption] || IMPORT_SOURCE_META['upload-file'];
   const enrichedNames = getEnrichedFieldNames(enrichConfig);
   const semanticCount = enrichedNames.length;
+  const activeStrategy = deriveBenchmarkStrategy(enrichConfig);
 
   return (
     <div className="onboardWizard__rightContent">
@@ -689,6 +745,8 @@ const ReviewSummaryPanel = ({ useCase, importOption, enrichConfig }) => {
           </OuiText>
         </div>
       </div>
+      <OuiSpacer size="l" />
+      <BenchmarkTable activeStrategy={activeStrategy} />
     </div>
   );
 };
@@ -697,7 +755,6 @@ const ProvisioningLivePanel = ({ useCase, enrichConfig }) => {
   const detectedFields = getDetectedFields(useCase);
   const searchableFields = detectedFields.filter((f) => f.searchable);
   const hasSemantic = getEnrichedFieldNames(enrichConfig).length > 0;
-  const activeStrategy = deriveBenchmarkStrategy(enrichConfig);
 
   // The ordered list of resources to provision (pipeline only when semantic).
   const steps = PROVISION_STEPS.filter((s) => !s.semanticOnly || hasSemantic);
@@ -769,49 +826,6 @@ const ProvisioningLivePanel = ({ useCase, enrichConfig }) => {
               <OuiText size="xs"><strong style={{ color: '#5CB198' }}>Active</strong></OuiText>
             </div>
           </div>
-
-          {/* Benchmark — reflects the retrieval strategy the user configured */}
-          <OuiSpacer size="l" />
-          <OuiText size="xs" color="subdued">
-            <strong>Expected retrieval performance</strong>
-          </OuiText>
-          <OuiSpacer size="xs" />
-          <OuiText size="xs" color="subdued">
-            <p style={{ margin: 0 }}>
-              Illustrative values; actual results vary by workload. Your configuration
-              maps to the highlighted strategy.
-            </p>
-          </OuiText>
-          <OuiSpacer size="s" />
-          <table className="onboardWizard__benchTable">
-            <thead>
-              <tr>
-                <th>Strategy</th>
-                <th>NDCG@10</th>
-                <th>P99 (ms)</th>
-                <th>Index</th>
-                <th>Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {BENCHMARK_ROWS.map((row) => (
-                <tr
-                  key={row.key}
-                  className={row.key === activeStrategy ? 'onboardWizard__benchRow--active' : undefined}>
-                  <td>
-                    {row.strategy}
-                    {row.key === activeStrategy && (
-                      <span className="onboardWizard__benchYou">Your setup</span>
-                    )}
-                  </td>
-                  <td>{row.ndcg}</td>
-                  <td>{row.p99}</td>
-                  <td>{row.indexSize}</td>
-                  <td>{row.cost}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </>
       )}
     </div>
@@ -924,6 +938,9 @@ export const OnboardingWizardPage = () => {
   // `connectSource` holds the chosen source key once selected.
   const [importStage, setImportStage] = useState(null);
   const [connectSource, setConnectSource] = useState(null);
+  // Step 2 enrichment view: false = show the suggestion summary, true = show the
+  // per-field editor (fields / model / language).
+  const [enrichEditing, setEnrichEditing] = useState(false);
   const feedRef = useRef(null);
   const feedEndRef = useRef(null);
   const streamTimers = useRef([]);
@@ -955,7 +972,12 @@ export const OnboardingWizardPage = () => {
     streamTimers.current.forEach(clearTimeout);
     streamTimers.current = [];
 
-    const fullText = step.question;
+    // For the enrichment step, the suggestion rationale is part of the
+    // assistant's response (a second paragraph), not a side box.
+    const fullText =
+      step.optionType === 'enrich'
+        ? `${step.question}\n\n${getSuggestionReason(useCase)}`
+        : step.question;
     const tokens = fullText.split(/(\s+)/);
     setStreamedText('');
     setIsStreaming(true);
@@ -1105,6 +1127,15 @@ export const OnboardingWizardPage = () => {
     confirmCurrentStep();
   }, [isProcessing, ensureEnrichConfig, confirmCurrentStep]);
 
+  // "Edit" the suggestion: opens the editor as a new turn in the conversation
+  // (a user "Edit" bubble + assistant editor response), rather than swapping
+  // the suggestion inline.
+  const handleEnrichEdit = useCallback(() => {
+    if (isProcessing) return;
+    ensureEnrichConfig();
+    setEnrichEditing(true);
+  }, [isProcessing, ensureEnrichConfig]);
+
   const handleSkip = useCallback(() => {
     if (isConfirmed || isProcessing) return;
     // An empty config means "no fields enriched".
@@ -1120,6 +1151,7 @@ export const OnboardingWizardPage = () => {
         // Clear the step 1 import sub-flow as we leave it.
         setImportStage(null);
         setConnectSource(null);
+        setEnrichEditing(false);
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -1140,6 +1172,7 @@ export const OnboardingWizardPage = () => {
         // Reset the step 1 import sub-flow when jumping back.
         setImportStage(null);
         setConnectSource(null);
+        setEnrichEditing(false);
       }
     },
     [currentStep, confirmedSteps, selections, totalSteps]
@@ -1264,6 +1297,35 @@ export const OnboardingWizardPage = () => {
           <div key={`import-action-${currentStep}`} className="threadPage__message threadPage__message--assistant">
             <div className="threadPage__bubble threadPage__bubble--assistant">
               {renderImportAction()}
+            </div>
+          </div>
+        );
+      }
+    }
+
+    // Enrichment "Edit" sub-flow (step 2): clicking Edit on the suggestion adds
+    // a new user turn + an assistant turn containing the full editor.
+    if (step.optionType === 'enrich' && enrichEditing && !isConfirmed) {
+      messages.push(
+        <div key={`enrich-edit-${currentStep}`} className="threadPage__message threadPage__message--user">
+          <div className="threadPage__bubble threadPage__bubble--user">
+            <OuiText size="s">
+              <p>Edit the suggestion</p>
+            </OuiText>
+          </div>
+        </div>
+      );
+      if (!isProcessing) {
+        messages.push(
+          <div key={`enrich-editor-${currentStep}`} className="threadPage__message threadPage__message--assistant">
+            <div className="threadPage__bubble threadPage__bubble--assistant">
+              <OuiText size="s">
+                <p style={{ marginTop: 0 }}>
+                  Sure \u2014 adjust the fields, model type, and language below.
+                </p>
+              </OuiText>
+              <OuiSpacer size="s" />
+              {renderEnrichEditor()}
             </div>
           </div>
         );
@@ -1442,77 +1504,34 @@ export const OnboardingWizardPage = () => {
         currentSelection && typeof currentSelection === 'object' && !Array.isArray(currentSelection)
           ? currentSelection
           : buildDefaultEnrichConfig(useCase);
-      const detected = getDetectedFields(useCase);
-      const enrichedCount = getEnrichedFieldNames(config).length;
+      const enrichedNames = getEnrichedFieldNames(config);
+      const enrichedCount = enrichedNames.length;
 
+      // Suggestion summary — always shown in the question bubble. "Edit" opens
+      // the full editor as a new turn (see buildConversation), not inline.
       return (
-        <div className="onboardWizard__enrichList">
-          {detected.map((field) => {
-            const cfg = config[field.name] || {
-              enrich: false,
-              language: 'en',
-              modelType: 'dense',
-              customModel: '',
-            };
-            const suggested = isSuggestedField(field);
-            return (
-              <div
-                key={field.name}
-                className={`onboardWizard__enrichRow${cfg.enrich ? ' onboardWizard__enrichRow--on' : ''}`}>
-                <div className="onboardWizard__enrichHead">
-                  <OuiCheckbox
-                    id={`enrich-${field.name}`}
-                    label={field.name}
-                    checked={!!cfg.enrich}
-                    onChange={(e) =>
-                      handleEnrichFieldChange(field.name, { enrich: e.target.checked })
-                    }
-                    disabled={isConfirmed || isProcessing}
-                  />
-                  <span className="onboardWizard__enrichType">{field.type}</span>
-                  {suggested && (
-                    <span className="onboardWizard__storageBadge">Suggested</span>
-                  )}
-                </div>
-                {cfg.enrich && (
-                  <div className="onboardWizard__enrichControls">
-                    <OuiCompressedSelect
-                      prepend="Language"
-                      options={LANGUAGE_OPTIONS}
-                      value={cfg.language}
-                      onChange={(e) =>
-                        handleEnrichFieldChange(field.name, { language: e.target.value })
-                      }
-                      disabled={isConfirmed || isProcessing}
-                      aria-label={`Language for ${field.name}`}
-                    />
-                    <OuiCompressedSelect
-                      prepend="Model"
-                      options={MODEL_TYPE_OPTIONS}
-                      value={cfg.modelType}
-                      onChange={(e) =>
-                        handleEnrichFieldChange(field.name, { modelType: e.target.value })
-                      }
-                      disabled={isConfirmed || isProcessing}
-                      aria-label={`Model type for ${field.name}`}
-                    />
-                    {cfg.modelType === 'custom' && (
-                      <OuiCompressedFieldText
-                        placeholder="Custom model ID (e.g. my-org/my-model)"
-                        value={cfg.customModel}
-                        onChange={(e) =>
-                          handleEnrichFieldChange(field.name, { customModel: e.target.value })
-                        }
-                        disabled={isConfirmed || isProcessing}
-                        aria-label={`Custom model id for ${field.name}`}
-                      />
-                    )}
+        <div className="onboardWizard__enrichSuggestion">
+          {enrichedCount > 0 && (
+            <div className="onboardWizard__enrichSuggestList">
+              {enrichedNames.map((name) => {
+                const cfg = config[name];
+                return (
+                  <div key={name} className="onboardWizard__enrichSuggestRow">
+                    <OuiText size="s"><strong>{name}</strong></OuiText>
+                    <div className="onboardWizard__enrichSuggestTags">
+                      <span className="onboardWizard__enrichType">
+                        {cfg.language === 'multi' ? 'Multi-language' : 'English'}
+                      </span>
+                      <span className="onboardWizard__enrichType">
+                        {MODEL_TYPE_LABEL[cfg.modelType]}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
-          {!isConfirmed && (
+                );
+              })}
+            </div>
+          )}
+          {!isConfirmed && !enrichEditing && (
             <div className="onboardWizard__multiActions">
               <button
                 type="button"
@@ -1520,8 +1539,15 @@ export const OnboardingWizardPage = () => {
                 onClick={handleEnrichConfirm}
                 disabled={isProcessing || enrichedCount === 0}>
                 {enrichedCount > 0
-                  ? `Enable semantic search (${enrichedCount})`
-                  : 'Enable semantic search'}
+                  ? `Confirm suggestion (${enrichedCount})`
+                  : 'Confirm'}
+              </button>
+              <button
+                type="button"
+                className="onboardWizard__chip"
+                onClick={handleEnrichEdit}
+                disabled={isProcessing}>
+                Edit
               </button>
               <button
                 type="button"
@@ -1537,6 +1563,107 @@ export const OnboardingWizardPage = () => {
     }
 
     return null;
+  };
+
+  // The full per-field enrichment editor, shown as a new assistant turn after
+  // the user clicks "Edit" on the suggestion.
+  const renderEnrichEditor = () => {
+    const config =
+      currentSelection && typeof currentSelection === 'object' && !Array.isArray(currentSelection)
+        ? currentSelection
+        : buildDefaultEnrichConfig(useCase);
+    const detected = getDetectedFields(useCase);
+    const enrichedCount = getEnrichedFieldNames(config).length;
+
+    return (
+      <div className="onboardWizard__enrichList">
+        {detected.map((field) => {
+          const cfg = config[field.name] || {
+            enrich: false,
+            language: 'en',
+            modelType: 'dense',
+            customModel: '',
+          };
+          const suggested = isSuggestedField(field);
+          return (
+            <div
+              key={field.name}
+              className={`onboardWizard__enrichRow${cfg.enrich ? ' onboardWizard__enrichRow--on' : ''}`}>
+              <div className="onboardWizard__enrichHead">
+                <OuiCheckbox
+                  id={`enrich-${field.name}`}
+                  label={field.name}
+                  checked={!!cfg.enrich}
+                  onChange={(e) =>
+                    handleEnrichFieldChange(field.name, { enrich: e.target.checked })
+                  }
+                  disabled={isConfirmed || isProcessing}
+                />
+                <span className="onboardWizard__enrichType">{field.type}</span>
+                {suggested && (
+                  <span className="onboardWizard__storageBadge">Suggested</span>
+                )}
+              </div>
+              {cfg.enrich && (
+                <div className="onboardWizard__enrichControls">
+                  <OuiCompressedSelect
+                    prepend="Language"
+                    options={LANGUAGE_OPTIONS}
+                    value={cfg.language}
+                    onChange={(e) =>
+                      handleEnrichFieldChange(field.name, { language: e.target.value })
+                    }
+                    disabled={isConfirmed || isProcessing}
+                    aria-label={`Language for ${field.name}`}
+                  />
+                  <OuiCompressedSelect
+                    prepend="Model"
+                    options={MODEL_TYPE_OPTIONS}
+                    value={cfg.modelType}
+                    onChange={(e) =>
+                      handleEnrichFieldChange(field.name, { modelType: e.target.value })
+                    }
+                    disabled={isConfirmed || isProcessing}
+                    aria-label={`Model type for ${field.name}`}
+                  />
+                  {cfg.modelType === 'custom' && (
+                    <OuiCompressedFieldText
+                      placeholder="Custom model ID (e.g. my-org/my-model)"
+                      value={cfg.customModel}
+                      onChange={(e) =>
+                        handleEnrichFieldChange(field.name, { customModel: e.target.value })
+                      }
+                      disabled={isConfirmed || isProcessing}
+                      aria-label={`Custom model id for ${field.name}`}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {!isConfirmed && (
+          <div className="onboardWizard__multiActions">
+            <button
+              type="button"
+              className="onboardWizard__chip onboardWizard__chip--confirm"
+              onClick={handleEnrichConfirm}
+              disabled={isProcessing || enrichedCount === 0}>
+              {enrichedCount > 0
+                ? `Enable semantic search (${enrichedCount})`
+                : 'Enable semantic search'}
+            </button>
+            <button
+              type="button"
+              className="onboardWizard__skipLink"
+              onClick={handleSkip}
+              disabled={isProcessing}>
+              {step.skipLabel}
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (

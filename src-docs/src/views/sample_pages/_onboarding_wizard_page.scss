@@ -355,6 +355,36 @@
   padding-left: 24px;
 }
 
+// Suggestion-first summary (shown before the editor).
+.onboardWizard__enrichSuggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.onboardWizard__enrichSuggestList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.onboardWizard__enrichSuggestRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid $ouiBorderColor;
+  border-radius: $ouiBorderRadius;
+  background: $ouiColorEmptyShade;
+}
+
+.onboardWizard__enrichSuggestTags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .onboardWizard__skipLink {
   background: none;
   border: none;
