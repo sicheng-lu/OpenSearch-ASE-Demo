@@ -23,7 +23,6 @@ import {
   OuiCompressedTextArea,
   OuiCompressedSelect,
   OuiCompressedFieldText,
-  OuiBadge,
 } from '../../../../src/components';
 
 import { SessionLeftNav } from './session_left_nav';
@@ -596,39 +595,31 @@ const SemanticConfigPanel = ({ enrichConfig, useCase }) => {
             })}
           </div>
 
-          {/* Adaptive model card(s) */}
+          {/* Models in use — neutral info list */}
           <OuiSpacer size="m" />
-          <div className="onboardWizard__storageCard">
-            <div className="onboardWizard__storageCardHeader">
-              <OuiIcon type="machineLearningApp" size="l" />
-              <div>
-                <OuiText size="s"><strong>Models in use</strong></OuiText>
-                <OuiText size="xs" color="subdued">
-                  {enrichedNames.length} field{enrichedNames.length > 1 ? 's' : ''} enriched
-                </OuiText>
+          <OuiText size="xs" color="subdued">
+            <strong>Models in use</strong>
+          </OuiText>
+          <OuiSpacer size="xs" />
+          <div className="onboardWizard__storageSpecs">
+            {usesDense && (
+              <div className="onboardWizard__storageSpecRow">
+                <OuiText size="xs" color="subdued">Dense</OuiText>
+                <OuiText size="xs"><strong>{MODEL_BY_TYPE.dense} &middot; 384d</strong></OuiText>
               </div>
-            </div>
-            <OuiSpacer size="m" />
-            <div className="onboardWizard__storageSpecs">
-              {usesDense && (
-                <div className="onboardWizard__storageSpecRow">
-                  <OuiText size="xs" color="subdued">Dense</OuiText>
-                  <OuiText size="xs"><strong>{MODEL_BY_TYPE.dense} &middot; 384d</strong></OuiText>
-                </div>
-              )}
-              {usesSparse && (
-                <div className="onboardWizard__storageSpecRow">
-                  <OuiText size="xs" color="subdued">Sparse</OuiText>
-                  <OuiText size="xs"><strong>{MODEL_BY_TYPE.sparse}</strong></OuiText>
-                </div>
-              )}
-              {usesCustom && (
-                <div className="onboardWizard__storageSpecRow">
-                  <OuiText size="xs" color="subdued">Custom</OuiText>
-                  <OuiText size="xs"><strong>Fine-tuned model</strong></OuiText>
-                </div>
-              )}
-            </div>
+            )}
+            {usesSparse && (
+              <div className="onboardWizard__storageSpecRow">
+                <OuiText size="xs" color="subdued">Sparse</OuiText>
+                <OuiText size="xs"><strong>{MODEL_BY_TYPE.sparse}</strong></OuiText>
+              </div>
+            )}
+            {usesCustom && (
+              <div className="onboardWizard__storageSpecRow">
+                <OuiText size="xs" color="subdued">Custom</OuiText>
+                <OuiText size="xs"><strong>Fine-tuned model</strong></OuiText>
+              </div>
+            )}
           </div>
 
           {/* Generated pipeline */}
@@ -1480,9 +1471,7 @@ export const OnboardingWizardPage = () => {
                   />
                   <span className="onboardWizard__enrichType">{field.type}</span>
                   {suggested && (
-                    <OuiBadge color="hollow" iconType="starFilled">
-                      Suggested
-                    </OuiBadge>
+                    <span className="onboardWizard__storageBadge">Suggested</span>
                   )}
                 </div>
                 {cfg.enrich && (
