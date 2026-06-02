@@ -187,7 +187,7 @@ const HeroSection = () => (
           fontFamily: fonts.base,
           maxWidth: '560px',
         }}>
-        Unified Observability
+        Build Search in Minutes
       </h1>
       <p
         style={{
@@ -197,7 +197,7 @@ const HeroSection = () => (
           color: colors.textSecondary,
           margin: '0 0 32px',
         }}>
-        Logs, metrics, traces, and AI agent monitoring in one platform.
+        Full-text, vector, and hybrid search on a single managed platform.
       </p>
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
         <button
@@ -252,13 +252,13 @@ const OverviewSection = () => (
         }}>
         <div>
           <p style={{ fontSize: '14px', lineHeight: 1.7, color: colors.textSecondary, margin: 0 }}>
-            OpenSearch Service unifies logs, metrics, and traces on a single OpenTelemetry-native platform.
-            Ingest telemetry from containers, serverless functions, applications, and infrastructure, then
-            correlate signals in real time to find the root cause of an issue in seconds instead of hours. Pre-built
-            dashboards for application performance, infrastructure health, and security give teams an instant
-            starting point, while intelligent storage tiering keeps recent data hot for fast queries and ages
-            older data into low-cost storage automatically. Available fully managed or serverless, with the
-            open-source flexibility of OpenSearch.
+            OpenSearch Service lets you build a complete search experience on a single managed platform.
+            Create a collection, define your index from a template or a sample document, and optionally enrich
+            text fields with vector embeddings for semantic search — no ML pipeline to operate. Ingest data
+            through the bulk API, sample datasets, or connectors, then query it with keyword, vector, and hybrid
+            ranking that returns relevant results in milliseconds. Built-in relevance tuning, synonym support, and
+            analytics help you understand and improve search quality over time. Available fully managed or
+            serverless, with the open-source flexibility of OpenSearch.
           </p>
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -302,29 +302,29 @@ const OverviewSection = () => (
 // ─────────────────────────────────────────────
 const BENEFITS = [
   {
-    title: 'One platform for logs, metrics, and traces',
+    title: 'One platform for keyword, vector, and hybrid search',
     description:
-      'Stop stitching tools together. Correlate all three signal types in a single query and jump from a spiking metric straight to the log line or trace span behind it — less context-switching, faster answers.',
+      'Combine traditional full-text relevance with semantic vector search in a single query. Hybrid ranking blends both so you get exact keyword matches and meaning-based results together — no separate vector database to run.',
   },
   {
-    title: 'Root-cause analysis in seconds, at any scale',
+    title: 'Relevant results at any scale',
     description:
-      'Query petabytes of telemetry with sub-second latency using purpose-built time-series indexing. Auto-scaling absorbs the traffic spikes that happen during incidents, so investigations stay fast exactly when you need them to be.',
+      'Query billions of documents with millisecond latency using purpose-built inverted and vector indexes. Auto-scaling absorbs traffic spikes during peak demand, so search stays fast whether you have a thousand documents or a billion.',
   },
   {
-    title: 'Cost-optimized storage that grows with you',
+    title: 'Semantic search without the ML ops',
     description:
-      'Hot-warm-cold tiering keeps the last few days instantly queryable and ages older data into low-cost storage automatically. Pay only for what you use with serverless, or reserve capacity for steady production workloads. Up to 70% lower storage cost versus all-hot retention.',
+      'Enable natural-language search by picking the text fields to enrich. Built-in embedding models and ingest pipelines generate and index vectors automatically — no model hosting, no inference infrastructure, no pipeline to maintain.',
   },
   {
-    title: 'OpenTelemetry-native ingestion',
+    title: 'Flexible ingestion from any source',
     description:
-      'Collect data through OpenTelemetry, the AWS Distro for OpenTelemetry, FluentBit, and CloudWatch Logs subscriptions — no proprietary agents. Native integrations with Amazon EKS, AWS Lambda, and VPC Flow Logs get you collecting in minutes.',
+      'Load data through the bulk API, sample datasets, or connectors for Amazon S3, DynamoDB, and REST APIs — no proprietary format. Schema inference from a sample document gets your index defined and ingesting in minutes.',
   },
   {
     title: 'Fully managed and open source',
     description:
-      'Run observability on the open-source engine trusted across the industry, without the operational overhead. OpenSearch Service handles scaling, patching, and availability with a 99.9% SLA, while Apache 2.0 licensing keeps you free from lock-in.',
+      'Run search on the open-source engine trusted across the industry, without the operational overhead. OpenSearch Service handles scaling, patching, and availability with a 99.9% SLA, while Apache 2.0 licensing keeps you free from lock-in.',
   },
 ];
 

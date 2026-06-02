@@ -9,7 +9,7 @@
  * GitHub history for details.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 import {
   OuiButtonIcon,
@@ -20,308 +20,473 @@ import {
   OuiLoadingSpinner,
   OuiCode,
   OuiCheckbox,
-  OuiToolTip,
   OuiCompressedTextArea,
+  OuiCompressedSelect,
+  OuiCompressedFieldText,
+  OuiBadge,
 } from '../../../../src/components';
 
 import { SessionLeftNav } from './session_left_nav';
 
 /**
  * STEPS CONFIGURATION
- * Onboarding flow for OpenSearch Observability Data Collection.
- * Steps are grouped into main steps. Steps 1–3 are sub-steps of main step 1.
- * Each step defines left panel (question + options) and right panel (preview).
- *
+ * Data-first onboarding flow for OpenSearch Search Builder.
  * Main steps:
- *   1. What do you want to observe? (includes environment + collector config)
- *   2. Review and confirm
- *   3. Collecting your data
+ *   1. Import data (upload / API / sample) — schema inferred from the data
+ *   2. Enrich fields semantically (optional embeddings)
+ *   3. Confirm everything (single review gate)
+ *   4. Provision & go live (collection + index + pipeline + ingest created here)
+ *
+ * The use case is derived from the chosen sample dataset; uploads and data
+ * source connections default to the `custom` schema.
  */
 const STEPS = [
   {
-    title: 'Set up data sources',
+    title: 'Import data',
     mainStep: 1,
     subStep: 1,
     question:
-      'Welcome to OpenSearch for Observability. I\u2019ll help you set up your data. What would you like to observe?',
+      'Welcome to OpenSearch Search Builder. Let\u2019s start with your data \u2014 how would you like to import it?',
     optionType: 'chips',
     options: [
-      { key: 'application', label: 'Instrument application' },
-      { key: 'cloud', label: 'Connect existing data sources' },
-      { key: 'sample', label: 'Get started with sample data', empty: true },
-    ],
-    confirmation: (selected) => {
-      const labels = {
-        application: 'Instrument application',
-        cloud: 'Connect existing data sources',
-        sample: 'Get started with sample data',
-      };
-      return `Great choice! Let\u2019s set up ${labels[selected] || selected}.`;
-    },
-    rightPanel: {
-      title: 'Getting Started',
-      subtitle: 'Set up your data',
-      contentType: 'getting-started',
-    },
-  },
-  {
-    title: 'Set up data sources',
-    mainStep: 1,
-    subStep: 2,
-    question:
-      'What environment are you collecting data from? This helps me recommend the right integration approach.',
-    optionType: 'chips',
-    options: [
-      { key: 'opentelemetry', label: 'OpenTelemetry' },
-      { key: 'eks', label: 'EKS' },
-      { key: 'kubernetes', label: 'Kubernetes' },
-      { key: 'other', label: 'Other' },
-    ],
-    confirmation: (selected) => {
-      const labels = {
-        opentelemetry: 'OpenTelemetry',
-        eks: 'EKS',
-        kubernetes: 'Kubernetes',
-        other: 'Other',
-      };
-      return `${
-        labels[selected] || selected
-      } selected. I\u2019ll configure the collector for your environment.`;
-    },
-    rightPanel: {
-      title: 'Environment',
-      subtitle: 'Supported collection environments',
-      contentType: 'environment',
-    },
-  },
-  {
-    title: 'Set up data sources',
-    mainStep: 1,
-    subStep: '2-eks',
-    question:
-      'Scanning your AWS account for EKS clusters and instrumented services...',
-    optionType: 'auto-discovery',
-    options: [],
-    autoAdvanceDelay: 5000,
-    confirmation: () =>
-      'Discovery complete. We found 3 EKS clusters and 14 services instrumented with OpenTelemetry. Redirecting to review...',
-    rightPanel: {
-      title: 'EKS Discovery',
-      subtitle: 'Detecting clusters and services',
-      contentType: 'eks-discovery',
-    },
-  },
-  {
-    title: 'Set up data sources',
-    mainStep: 1,
-    subStep: 3,
-    question:
-      'Run the following command to start your OpenTelemetry collector. Once it\u2019s running, click "I am ready" to continue.',
-    optionType: 'chips',
-    options: [
-      { key: 'ready', label: 'I am ready', primary: true },
-      { key: 'goback', label: 'Go back' },
-    ],
-    confirmation: () =>
-      'Collector configured. Moving to data source connection.',
-    rightPanel: {
-      title: 'Collector Setup',
-      subtitle: 'Run this command to start the OTel collector',
-      contentType: 'collector-setup',
-    },
-  },
-  {
-    title: 'Set up data sources',
-    mainStep: 1,
-    subStep: 4,
-    question:
-      'Based on your setup, I recommend storing your telemetry in an OpenSearch Serverless Collection with Optimized engine. Columnar storage handles time-series log data more efficiently.',
-    optionType: 'chips',
-    options: [
-      { key: 'looks-good', label: 'Looks good', primary: true },
-      { key: 'customize', label: 'Customize' },
-      { key: 'store-existing', label: 'Store in existing' },
+      {
+        key: 'upload-file',
+        label: 'Upload a file (JSON / CSV)',
+        description: 'I\u2019ll infer your schema from the file',
+        requiresAction: 'upload',
+      },
+      {
+        key: 'connect-source',
+        label: 'Connect a data source',
+        description: 'Amazon S3, DynamoDB Streams, or a REST API',
+        requiresAction: 'connect',
+      },
+      {
+        key: 'sample-product-catalog',
+        label: 'Use sample data',
+        description: 'Explore with a ready-made dataset',
+      },
     ],
     confirmation: (selected) => {
       const messages = {
-        'looks-good':
-          'Telemetry will be stored in a new OpenSearch Serverless Collection with Optimized engine.',
-        customize:
-          'Telemetry storage customized. Configuration saved.',
-        'store-existing':
-          'Telemetry will be stored in your existing OpenSearch Serverless Collection.',
+        'upload-file': 'File received. I\u2019ve parsed your documents and inferred the schema.',
+        'connect-source': 'Data source connected. I\u2019ve sampled your records and inferred the schema.',
+        'sample-product-catalog': 'Loaded the sample dataset. Schema inferred.',
       };
-      return messages[selected] || 'Storage configured.';
+      return messages[selected] || 'Data imported. Schema inferred.';
     },
     rightPanel: {
-      title: 'Telemetry Storage',
-      subtitle: 'Recommended for your setup',
-      contentType: 'telemetry-storage',
+      title: 'Import Data',
+      subtitle: 'Bring your search data',
+      contentType: 'import-data',
     },
   },
   {
-    title: 'Review and confirm',
-    mainStep: 2,
-    question: 'Here\u2019s a summary of your setup. Everything look good?',
-    dynamicQuestion: (selections) => {
-      if (selections[0] === 'application') {
-        return 'Here\u2019s a summary of your setup. Everything look good?\n\nBased on your data, I recommend storing your telemetry in an OpenSearch Serverless Collection with Optimized engine. Columnar storage handles time-series log data more efficiently.';
-      }
-      return 'Here\u2019s a summary of your setup. Everything look good?';
-    },
-    optionType: 'chips',
-    options: [
-      { key: 'deploy', label: 'Looks good \u2014 deploy my configuration', primary: true },
-      { key: 'changes', label: 'I want to make changes' },
-    ],
-    confirmation: () => 'Configuration deployed! Collecting data now.',
-    rightPanel: {
-      title: 'Configuration Summary',
-      subtitle: 'Review before deploying',
-      contentType: 'summary',
-    },
-  },
-  {
-    title: 'Collecting your data',
-    mainStep: 3,
+    title: 'Import data',
+    mainStep: 1,
+    subStep: 2,
     question:
-      'Your pipeline is deployed and data is flowing in! I\u2019m collecting logs, metrics, and traces from your sources. You can watch the live counts on the right \u2014 once you\u2019re satisfied, continue to finish setup.',
+      'Here\u2019s the schema I detected from your data. Review the fields and types below \u2014 does this look right?',
     optionType: 'chips',
     options: [
-      { key: 'continue', label: 'Continue', primary: true },
-      { key: 'import', label: 'Import dashboards and queries' },
+      { key: 'looks-good', label: 'Looks good', primary: true },
+      { key: 'edit-fields', label: 'Edit fields' },
     ],
-    confirmation: () =>
-      'Data collection verified. Your observability pipeline is active.',
+    confirmation: (selected) => {
+      if (selected === 'looks-good') return 'Schema confirmed. Let\u2019s look at enrichment.';
+      return 'You can adjust field names and types in the mapping panel on the right.';
+    },
     rightPanel: {
-      title: 'Live Data Collection',
-      subtitle: 'Watching your data flow in real-time',
-      contentType: 'live-counters',
+      title: 'Detected Schema',
+      subtitle: 'Inferred from your data',
+      contentType: 'mapping-preview',
+    },
+  },
+  {
+    title: 'Enrich fields',
+    mainStep: 2,
+    subStep: 1,
+    question:
+      'Want to add semantic search? Here are your detected fields with my enrichment suggestions \u2014 the recommended ones are pre-selected. Set a language and model type per field, or skip this step.',
+    optionType: 'enrich',
+    options: [], // dynamically populated based on inferred fields
+    dynamicOptions: true,
+    skipLabel: 'Skip',
+    confirmation: (selected) => {
+      const names = getEnrichedFieldNames(selected);
+      if (names.length === 0) {
+        return 'Skipped semantic enrichment. You\u2019ll use keyword search.';
+      }
+      return `Semantic search enabled for ${names.length} field${names.length > 1 ? 's' : ''}. I\u2019ll add the enrichment pipeline.`;
+    },
+    rightPanel: {
+      title: 'Semantic Search',
+      subtitle: 'AI-powered enrichment',
+      contentType: 'semantic-config',
+    },
+  },
+  {
+    title: 'Confirm everything',
+    mainStep: 3,
+    subStep: 1,
+    question:
+      'Here\u2019s everything I\u2019ll set up for you. Review the plan below \u2014 ready to create your search?',
+    optionType: 'chips',
+    options: [
+      { key: 'create', label: 'Create my search', primary: true },
+      { key: 'make-changes', label: 'Make changes' },
+    ],
+    confirmation: (selected) => {
+      if (selected === 'create') return 'Creating your search resources...';
+      return 'No problem \u2014 use the step dots above to jump back and adjust.';
+    },
+    rightPanel: {
+      title: 'Review & Confirm',
+      subtitle: 'What I\u2019ll create',
+      contentType: 'review-summary',
+    },
+  },
+  {
+    title: 'Go live',
+    mainStep: 4,
+    subStep: 1,
+    question:
+      'Your search is live! I\u2019ve created the collection, index, and pipeline, and indexed your data. Try a search or open the dashboard.',
+    optionType: 'chips',
+    options: [
+      { key: 'open-dashboard', label: 'Open dashboard', primary: true },
+      { key: 'try-query', label: 'Try a search query' },
+    ],
+    confirmation: () => 'Setup complete. Your search tool is ready to use.',
+    rightPanel: {
+      title: 'Provisioning',
+      subtitle: 'Creating your resources',
+      contentType: 'provisioning-live',
     },
   },
 ];
 
-// Docker command for Step 3
-const OTEL_COMMAND = `docker run \\
-  -e CLICKHOUSE_ENDPOINT="https://d9vcnuuz5c.us-west-2.aws.clickhouse.cloud:8443" \\
-  -e CLICKHOUSE_USER="default" \\
-  -e CLICKHOUSE_PASSWORD="<your_password_here>" \\
-  -p 4317:4317 \\
-  -p 4318:4318 \\
-  clickhouse/clickstack-otel-collector:latest`;
+// ─────────────────────────────────────────────
+// INDEX TEMPLATES per use case
+// ─────────────────────────────────────────────
+
+const INDEX_TEMPLATES = {
+  'product-catalog': {
+    name: 'product-search',
+    fields: [
+      { name: 'title', type: 'text', searchable: true, filterable: false },
+      { name: 'description', type: 'text', searchable: true, filterable: false },
+      { name: 'category', type: 'keyword', searchable: false, filterable: true },
+      { name: 'price', type: 'float', searchable: false, filterable: true },
+      { name: 'brand', type: 'keyword', searchable: false, filterable: true },
+      { name: 'image_url', type: 'keyword', searchable: false, filterable: false },
+      { name: 'in_stock', type: 'boolean', searchable: false, filterable: true },
+      { name: 'rating', type: 'float', searchable: false, filterable: true },
+    ],
+  },
+  'document-search': {
+    name: 'document-search',
+    fields: [
+      { name: 'title', type: 'text', searchable: true, filterable: false },
+      { name: 'content', type: 'text', searchable: true, filterable: false },
+      { name: 'author', type: 'keyword', searchable: false, filterable: true },
+      { name: 'tags', type: 'keyword', searchable: false, filterable: true },
+      { name: 'created_at', type: 'date', searchable: false, filterable: true },
+      { name: 'file_type', type: 'keyword', searchable: false, filterable: true },
+    ],
+  },
+  'knowledge-base': {
+    name: 'knowledge-base',
+    fields: [
+      { name: 'question', type: 'text', searchable: true, filterable: false },
+      { name: 'answer', type: 'text', searchable: true, filterable: false },
+      { name: 'topic', type: 'keyword', searchable: false, filterable: true },
+      { name: 'source', type: 'keyword', searchable: false, filterable: true },
+      { name: 'last_updated', type: 'date', searchable: false, filterable: true },
+    ],
+  },
+  custom: {
+    name: 'custom-index',
+    fields: [
+      { name: 'title', type: 'text', searchable: true, filterable: false },
+      { name: 'body', type: 'text', searchable: true, filterable: false },
+      { name: 'category', type: 'keyword', searchable: false, filterable: true },
+      { name: 'timestamp', type: 'date', searchable: false, filterable: true },
+    ],
+  },
+};
+
+// ─────────────────────────────────────────────
+// IMPORT → USE CASE DERIVATION
+// The opening import choice determines the schema. Sample datasets map to a
+// matching template; uploads and live data sources default to `custom`.
+// ─────────────────────────────────────────────
+
+const deriveUseCase = (importKey) => {
+  switch (importKey) {
+    case 'sample-product-catalog':
+      return 'product-catalog';
+    case 'sample-document-search':
+      return 'document-search';
+    case 'sample-knowledge-base':
+      return 'knowledge-base';
+    default:
+      return 'custom';
+  }
+};
+
+// Single source of truth for the fields shown in step 2. These are ALL the
+// fields from the schema detected in step 1 (which is driven by the import
+// option picked in step 1), so step 2 always matches step 1 exactly.
+const getDetectedFields = (useCase) => {
+  const template = INDEX_TEMPLATES[useCase] || INDEX_TEMPLATES['custom'];
+  return template.fields;
+};
+
+// ─────────────────────────────────────────────
+// STEP 2 ENRICHMENT — per-field config options
+// ─────────────────────────────────────────────
+
+const LANGUAGE_OPTIONS = [
+  { value: 'en', text: 'English' },
+  { value: 'multi', text: 'Multi-language' },
+];
+
+const MODEL_TYPE_OPTIONS = [
+  { value: 'dense', text: 'Dense model' },
+  { value: 'sparse', text: 'Sparse model' },
+  { value: 'custom', text: 'Custom fine-tuned' },
+];
+
+// Resolved model name per model type (dense/sparse are fixed; custom uses the
+// user-entered id). Used by the right panel and the generated pipeline.
+const MODEL_BY_TYPE = {
+  dense: 'all-MiniLM-L6-v2',
+  sparse: 'opensearch-neural-sparse-encoding-v1',
+};
+
+const MODEL_TYPE_LABEL = {
+  dense: 'Dense model',
+  sparse: 'Sparse model',
+  custom: 'Custom fine-tuned',
+};
+
+// We suggest enriching text fields by default; other types start unchecked but
+// remain fully editable.
+const isSuggestedField = (field) => field.type === 'text';
+
+// Build the default per-field enrichment config from the detected schema.
+const buildDefaultEnrichConfig = (useCase) => {
+  const config = {};
+  getDetectedFields(useCase).forEach((f) => {
+    config[f.name] = {
+      enrich: isSuggestedField(f),
+      language: 'en',
+      modelType: 'dense',
+      customModel: '',
+    };
+  });
+  return config;
+};
+
+// The list of fields the user actually chose to enrich (config form).
+const getEnrichedFieldNames = (config) =>
+  config && typeof config === 'object'
+    ? Object.keys(config).filter((name) => config[name] && config[name].enrich)
+    : [];
+
+// Resolve the model name for a field's config.
+const resolveModelName = (cfg) => {
+  if (!cfg) return '';
+  if (cfg.modelType === 'custom') return cfg.customModel || 'custom-model';
+  return MODEL_BY_TYPE[cfg.modelType] || MODEL_BY_TYPE.dense;
+};
+
+// ─────────────────────────────────────────────
+// RETRIEVAL BENCHMARK (final panel) — illustrative results that reflect the
+// strategy the user configured in step 2.
+// ─────────────────────────────────────────────
+
+const BENCHMARK_ROWS = [
+  { key: 'bm25', strategy: 'BM25 (Baseline)', ndcg: '0.62', p99: '8', indexSize: '+0%', cost: '—' },
+  { key: 'sparse', strategy: 'Sparse / ASE', ndcg: '0.74', p99: '14', indexSize: '+15%', cost: 'Low' },
+  { key: 'dense', strategy: 'Dense / ASE', ndcg: '0.78', p99: '28', indexSize: '+40%', cost: 'Med' },
+  { key: 'hybrid', strategy: 'Hybrid', ndcg: '0.82', p99: '32', indexSize: '+55%', cost: 'Med' },
+];
+
+// Map the user's per-field enrichment config to the strategy row that reflects
+// the search they built:
+//   no enrichment            → BM25 baseline (keyword only)
+//   all sparse               → Sparse / ASE
+//   all dense (or custom)    → Dense / ASE
+//   mix of sparse and dense  → Hybrid
+const deriveBenchmarkStrategy = (enrichConfig) => {
+  const names = getEnrichedFieldNames(enrichConfig);
+  if (names.length === 0) return 'bm25';
+  const types = new Set(
+    names.map((n) => (enrichConfig[n].modelType === 'sparse' ? 'sparse' : 'dense'))
+  );
+  if (types.has('sparse') && types.has('dense')) return 'hybrid';
+  if (types.has('sparse')) return 'sparse';
+  return 'dense';
+};
+
+// Human-readable description of where the data came from, for the summary panel.
+const IMPORT_SOURCE_META = {
+  'upload-file': { label: 'Uploaded file', detail: 'JSON / CSV', docs: '—' },
+  'connect-source': { label: 'Connected data source', detail: 'S3 / API / DynamoDB', docs: 'streaming' },
+  'sample-product-catalog': { label: 'Sample dataset', detail: 'Product catalog', docs: '~100' },
+  'sample-document-search': { label: 'Sample dataset', detail: 'Documents', docs: '~100' },
+  'sample-knowledge-base': { label: 'Sample dataset', detail: 'Knowledge base', docs: '~100' },
+};
+
+// Data sources offered when the user chooses "Connect a data source". The user
+// picks one in the left conversation before the import is finalized.
+const CONNECT_SOURCES = [
+  { key: 's3', label: 'Amazon S3', description: 'Bulk import from an S3 bucket', icon: 'logo_aws' },
+  { key: 'dynamodb', label: 'DynamoDB Streams', description: 'Real-time sync from DynamoDB', icon: 'logo_aws' },
+  { key: 'api', label: 'REST API Crawler', description: 'Crawl and index from a REST API', icon: 'link' },
+];
+
+// Sample mapping JSON for the code block
+const SAMPLE_MAPPING_JSON = (fields) => {
+  const properties = {};
+  fields.forEach((f) => {
+    properties[f.name] = { type: f.type };
+    if (f.type === 'text') {
+      properties[f.name].analyzer = 'standard';
+    }
+  });
+  return JSON.stringify({ mappings: { properties } }, null, 2);
+};
+
+// Ingest pipeline config for semantic enrichment. Builds one processor per
+// enriched field, choosing the processor + model from that field's config.
+const INGEST_PIPELINE_JSON = (config) => {
+  const enriched = getEnrichedFieldNames(config);
+  const processors = enriched.map((name) => {
+    const cfg = config[name];
+    const modelId = resolveModelName(cfg);
+    const processorType = cfg.modelType === 'sparse' ? 'sparse_encoding' : 'text_embedding';
+    return {
+      [processorType]: {
+        model_id: modelId,
+        field_map: { [name]: `${name}_embedding` },
+      },
+    };
+  });
+  return JSON.stringify(
+    { description: 'Semantic enrichment pipeline', processors },
+    null,
+    2
+  );
+};
+
 
 // ─────────────────────────────────────────────
 // RIGHT PANEL SUBCOMPONENTS
 // ─────────────────────────────────────────────
 
-const CHECKLIST_STEPS = [
-  { label: 'Set observability goal', description: 'Choose what you want to observe' },
-  { label: 'Collect data from environment', description: 'Configure your collector and environment' },
+const PROVISION_STEPS = [
+  { key: 'collection', label: 'Collection created', icon: 'database' },
+  { key: 'index', label: 'Index created', icon: 'indexMapping' },
+  { key: 'pipeline', label: 'Ingest pipeline created', icon: 'compute', semanticOnly: true },
+  { key: 'ingest', label: 'Data indexed', icon: 'importAction' },
 ];
 
-const GettingStartedPanel = () => {
-  return (
-    <div className="onboardWizard__rightContent">
-      <RightPanelHeader
-        icon="integrationObservability"
-        title="Getting Started"
-        subtitle="Set up your data"
-      />
-      <OuiSpacer size="l" />
-      <div className="onboardWizard__checklist">
-        {CHECKLIST_STEPS.map((item, i) => (
-          <div key={i} className="onboardWizard__checklistItem">
-            <div className="onboardWizard__checklistText">
-              <OuiText size="s">
-                <strong>{item.label}</strong>
-              </OuiText>
-              <OuiText size="xs" color="subdued">
-                <p style={{ margin: 0 }}>{item.description}</p>
-              </OuiText>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const EnvironmentPanel = ({ selectedOption }) => {
-  const environments = [
-    {
-      key: 'opentelemetry',
-      icon: 'integrationObservability',
-      name: 'OpenTelemetry',
-      badge: 'Native integration',
-      setupTime: '~5 min',
-    },
-    {
-      key: 'eks',
-      icon: 'logo_aws',
-      name: 'EKS',
-      badge: 'Managed service',
-      setupTime: '~10 min',
-    },
-    {
-      key: 'kubernetes',
-      icon: 'logo_kubernetes',
-      name: 'Kubernetes',
-      badge: 'Self-managed',
-      setupTime: '~8 min',
-    },
-    {
-      key: 'other',
-      icon: 'compute',
-      name: 'Other',
-      badge: 'Custom setup',
-      setupTime: '~15 min',
-    },
-  ];
-
-  const selected = environments.find((e) => e.key === selectedOption);
+const ImportDataPanel = ({ selectedOption, importStage, connectSource }) => {
+  const isSample = typeof selectedOption === 'string' && selectedOption.startsWith('sample-');
+  const isUpload = selectedOption === 'upload-file';
+  const isConnect = selectedOption === 'connect-source';
 
   return (
     <div className="onboardWizard__rightContent">
       <RightPanelHeader
-        icon="compute"
-        title="Environment"
-        subtitle="Supported collection environments"
+        icon="importAction"
+        title="Import Data"
+        subtitle="Bring your search data"
       />
       <OuiSpacer size="l" />
       <div className="onboardWizard__envGrid">
-        {environments.map((env) => (
-          <div
-            key={env.key}
-            className={`onboardWizard__envCard${
-              selectedOption === env.key
-                ? ' onboardWizard__envCard--selected'
-                : ''
-            }`}>
-            <OuiIcon type={env.icon} size="l" />
-            <OuiText size="s">
-              <strong>{env.name}</strong>
-            </OuiText>
-            <span className="onboardWizard__envBadge">{env.badge}</span>
-          </div>
-        ))}
+        <div className={`onboardWizard__envCard${isUpload ? ' onboardWizard__envCard--selected' : ''}`}>
+          <OuiIcon type="importAction" size="l" />
+          <OuiText size="s"><strong>Upload File</strong></OuiText>
+          <span className="onboardWizard__envBadge">JSON / CSV</span>
+        </div>
+        <div className={`onboardWizard__envCard${isConnect ? ' onboardWizard__envCard--selected' : ''}`}>
+          <OuiIcon type="link" size="l" />
+          <OuiText size="s"><strong>Data Source</strong></OuiText>
+          <span className="onboardWizard__envBadge">S3 / API</span>
+        </div>
+        <div className={`onboardWizard__envCard${isSample ? ' onboardWizard__envCard--selected' : ''}`}>
+          <OuiIcon type="documents" size="l" />
+          <OuiText size="s"><strong>Sample Data</strong></OuiText>
+          <span className="onboardWizard__envBadge">~100 docs</span>
+        </div>
       </div>
-      {selected && (
+      {isUpload && (
+        <>
+          <OuiSpacer size="l" />
+          <div className="onboardWizard__infoPlaceholder" style={{ minHeight: 100, borderStyle: 'dashed' }}>
+            <div style={{ textAlign: 'center' }}>
+              <OuiIcon type="importAction" size="xl" color="subdued" />
+              <OuiSpacer size="s" />
+              <OuiText size="xs" color="subdued">
+                <p>{importStage === 'upload' ? 'Waiting for a file \u2014 choose one in the chat' : 'Drop a JSON or CSV file here, or paste a sample document'}</p>
+              </OuiText>
+            </div>
+          </div>
+          <OuiSpacer size="xs" />
+          <OuiText size="xs" color="subdued">
+            <p style={{ margin: 0 }}>I&rsquo;ll infer your field names and types from the file.</p>
+          </OuiText>
+        </>
+      )}
+      {isConnect && (
+        <>
+          <OuiSpacer size="l" />
+          <div className="onboardWizard__storageExistingList">
+            {CONNECT_SOURCES.map((src) => (
+              <div
+                key={src.key}
+                className={`onboardWizard__storageExistingItem${
+                  connectSource === src.key ? ' onboardWizard__storageExistingItem--selected' : ''
+                }`}>
+                <OuiIcon type={src.icon} size="s" />
+                <div>
+                  <OuiText size="xs"><strong>{src.label}</strong></OuiText>
+                  <OuiText size="xs" color="subdued">{src.description}</OuiText>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {isSample && (
         <>
           <OuiSpacer size="l" />
           <div className="onboardWizard__envDetail">
-            <OuiText size="xs">
-              <strong>What&rsquo;s included</strong>
-            </OuiText>
+            <OuiText size="xs"><strong>Sample dataset includes:</strong></OuiText>
             <OuiSpacer size="xs" />
             <ul className="onboardWizard__envDetailList">
-              <li>Collector configuration</li>
-              <li>Pre-built dashboards</li>
-              <li>Alerting templates</li>
+              <li>~100 pre-formatted documents ready to index</li>
+              <li>Realistic field values for testing queries</li>
+              <li>Schema inferred automatically &mdash; no setup needed</li>
             </ul>
+          </div>
+        </>
+      )}
+      {!selectedOption && (
+        <>
+          <OuiSpacer size="l" />
+          <div className="onboardWizard__envDetail">
+            <OuiText size="xs"><strong>Pick a starting point</strong></OuiText>
             <OuiSpacer size="xs" />
-            <OuiText size="xs" color="subdued">
-              Estimated setup time: {selected.setupTime}
-            </OuiText>
+            <ul className="onboardWizard__envDetailList">
+              <li><strong>Upload</strong> &mdash; I&rsquo;ll infer mappings from your file</li>
+              <li><strong>Data source</strong> &mdash; connect S3, DynamoDB, or an API</li>
+              <li><strong>Sample data</strong> &mdash; explore with a ready-made dataset</li>
+            </ul>
           </div>
         </>
       )}
@@ -329,94 +494,14 @@ const EnvironmentPanel = ({ selectedOption }) => {
   );
 };
 
-const EKS_DISCOVERY_CLUSTERS = [
-  { name: 'prod-app-cluster', region: 'us-west-2', services: 6, status: 'Active' },
-  { name: 'staging-services', region: 'us-west-2', services: 5, status: 'Active' },
-  { name: 'dev-playground', region: 'us-east-1', services: 3, status: 'Active' },
-];
-
-const EKSDiscoveryPanel = ({ discoveryPhase }) => {
-  return (
-    <div className="onboardWizard__rightContent">
-      <RightPanelHeader
-        icon="logo_aws"
-        title="EKS Discovery"
-        subtitle="Detecting clusters and services"
-      />
-      <OuiSpacer size="l" />
-      {discoveryPhase === 'scanning' && (
-        <div className="onboardWizard__eksScanning">
-          <div className="onboardWizard__eksScanRow">
-            <OuiLoadingSpinner size="s" />
-            <OuiText size="s">Scanning AWS account for EKS clusters...</OuiText>
-          </div>
-          <OuiSpacer size="m" />
-          <div className="onboardWizard__eksScanProgress">
-            <div className="onboardWizard__eksScanProgressBar" />
-          </div>
-        </div>
-      )}
-      {discoveryPhase === 'found' && (
-        <div className="onboardWizard__eksResults">
-          <div className="onboardWizard__eksResultSummary">
-            <div className="onboardWizard__eksResultBadge">
-              <OuiIcon type="checkInCircleFilled" size="s" color="success" />
-              <OuiText size="s">
-                <strong>3 EKS clusters</strong> detected
-              </OuiText>
-            </div>
-            <OuiSpacer size="xs" />
-            <div className="onboardWizard__eksResultBadge">
-              <OuiIcon type="checkInCircleFilled" size="s" color="success" />
-              <OuiText size="s">
-                <strong>14 services</strong> instrumented with OpenTelemetry
-              </OuiText>
-            </div>
-          </div>
-          <OuiSpacer size="l" />
-          <div className="onboardWizard__eksClusterList">
-            {EKS_DISCOVERY_CLUSTERS.map((cluster) => (
-              <div key={cluster.name} className="onboardWizard__eksClusterCard">
-                <div className="onboardWizard__eksClusterHeader">
-                  <OuiIcon type="compute" size="m" />
-                  <div>
-                    <OuiText size="s">
-                      <strong>{cluster.name}</strong>
-                    </OuiText>
-                    <OuiText size="xs" color="subdued">
-                      {cluster.region} &middot; {cluster.status}
-                    </OuiText>
-                  </div>
-                </div>
-                <div className="onboardWizard__eksClusterServices">
-                  <OuiText size="xs" color="subdued">
-                    {cluster.services} instrumented services
-                  </OuiText>
-                  <span className="onboardWizard__eksClusterLive">
-                    <span className="onboardWizard__liveDot" />
-                    <OuiText size="xs">Active</OuiText>
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <OuiSpacer size="m" />
-          <OuiText size="xs" color="subdued">
-            <p style={{ margin: 0 }}>
-              Waiting for additional data... Auto-advancing to review.
-            </p>
-          </OuiText>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const CollectorSetupPanel = ({ confirmed }) => {
+const MappingPreviewPanel = ({ useCase }) => {
+  const template = INDEX_TEMPLATES[useCase] || INDEX_TEMPLATES['custom'];
   const [copied, setCopied] = useState(false);
 
+  const mappingJson = SAMPLE_MAPPING_JSON(template.fields);
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(OTEL_COMMAND.replace(/\\\n\s*/g, ' '));
+    navigator.clipboard.writeText(mappingJson);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -424,450 +509,320 @@ const CollectorSetupPanel = ({ confirmed }) => {
   return (
     <div className="onboardWizard__rightContent">
       <RightPanelHeader
-        icon="logo_docker"
-        title="Collector Setup"
-        subtitle="Run this command to start the OTel collector"
+        icon="indexMapping"
+        title="Detected Schema"
+        subtitle="Inferred from your data"
       />
       <OuiSpacer size="l" />
+      {/* Field table */}
+      <div className="onboardWizard__summaryList">
+        {template.fields.map((field) => (
+          <div key={field.name} className="onboardWizard__summaryRow" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <OuiText size="xs"><strong>{field.name}</strong></OuiText>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <span className="onboardWizard__envBadge">{field.type}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <OuiSpacer size="m" />
+      {/* JSON preview */}
       <div className="onboardWizard__codeBlock">
         <button
           type="button"
           className="onboardWizard__copyBtn"
           onClick={handleCopy}
-          aria-label="Copy command to clipboard">
+          aria-label="Copy mapping JSON">
           <OuiIcon type={copied ? 'check' : 'copy'} size="s" />
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
-        <OuiCode language="bash" className="onboardWizard__code">
-          {OTEL_COMMAND}
+        <OuiCode language="json" className="onboardWizard__code">
+          {mappingJson}
         </OuiCode>
       </div>
-      <OuiSpacer size="m" />
-      <OuiText size="xs" color="subdued">
-        <p>
-          Replace <code>&lt;your_password_here&gt;</code> with your actual
-          password. The collector will listen on ports 4317 (gRPC) and 4318
-          (HTTP) for incoming telemetry data.
-        </p>
-      </OuiText>
-      {confirmed && (
-        <>
-          <OuiSpacer size="l" />
-          <div className="onboardWizard__verifiedStatus">
-            <OuiIcon type="checkInCircleFilled" size="m" color="success" />
-            <OuiText size="s">
-              <strong>Collector detected</strong>
-            </OuiText>
-          </div>
-        </>
-      )}
     </div>
   );
 };
 
-const TelemetryStoragePanel = ({ selectedOption }) => {
-  const recommendation = {
-    type: 'OpenSearch Serverless Collection',
-    subtitle: 'Optimized engine \u2014 Columnar storage',
-    icon: 'logo_opensearch',
-    reason:
-      'Serverless with columnar storage handles time-series log data more efficiently, giving you faster queries, lower storage costs, and no infrastructure to manage for observability workloads.',
-    specs: [
-      { label: 'Engine', value: 'Optimized (Columnar)' },
-      { label: 'Index pattern', value: 'otel-v1-*' },
-      { label: 'Default retention', value: '30 days' },
-    ],
-  };
+const SemanticConfigPanel = ({ enrichConfig, useCase }) => {
+  const detectedFields = getDetectedFields(useCase);
+  const enrichedNames = getEnrichedFieldNames(enrichConfig);
+  const hasSelection = enrichedNames.length > 0;
 
-  const alternative = {
-    type: 'OpenSearch Managed Cluster',
-    reason:
-      'Better suited for workloads requiring full cluster control, custom plugin support, or dedicated infrastructure.',
-  };
+  // Which model types are in play, for the adaptive model card.
+  const usesDense = enrichedNames.some((n) => enrichConfig[n].modelType === 'dense');
+  const usesSparse = enrichedNames.some((n) => enrichConfig[n].modelType === 'sparse');
+  const usesCustom = enrichedNames.some((n) => enrichConfig[n].modelType === 'custom');
 
   return (
     <div className="onboardWizard__rightContent">
       <RightPanelHeader
-        icon="database"
-        title="Telemetry Storage"
-        subtitle="Recommended for your setup"
+        icon="compute"
+        title="Semantic Search"
+        subtitle="AI-powered enrichment"
       />
       <OuiSpacer size="l" />
-      <div
-        className={`onboardWizard__storageCard${
-          selectedOption === 'looks-good'
-            ? ' onboardWizard__storageCard--confirmed'
-            : ''
-        }`}>
-        <div className="onboardWizard__storageCardHeader">
-          <OuiIcon type={recommendation.icon} size="l" />
-          <div>
-            <OuiText size="s">
-              <strong>{recommendation.type}</strong>
-            </OuiText>
-            <OuiText size="xs" color="subdued">
-              {recommendation.subtitle}
-            </OuiText>
-            <span className="onboardWizard__storageBadge">Recommended</span>
-          </div>
+
+      {!hasSelection && (
+        <div className="onboardWizard__envDetail">
+          <OuiText size="xs"><strong>No fields enriched yet</strong></OuiText>
+          <OuiSpacer size="xs" />
+          <OuiText size="xs" color="subdued">
+            <p style={{ margin: 0 }}>
+              Select fields in the chat to enable semantic search. I&rsquo;ve suggested the
+              text fields most likely to benefit. {detectedFields.length} fields detected.
+            </p>
+          </OuiText>
         </div>
-        <OuiSpacer size="s" />
-        <OuiText size="xs" color="subdued">
-          <p style={{ margin: 0 }}>{recommendation.reason}</p>
-        </OuiText>
-        <OuiSpacer size="m" />
-        <div className="onboardWizard__storageSpecs">
-          {recommendation.specs.map((spec) => (
-            <div key={spec.label} className="onboardWizard__storageSpecRow">
-              <OuiText size="xs" color="subdued">
-                {spec.label}
-              </OuiText>
-              <OuiText size="xs">
-                <strong>{spec.value}</strong>
-              </OuiText>
-            </div>
-          ))}
-        </div>
-      </div>
-      <OuiSpacer size="m" />
-      <div className="onboardWizard__storageAlt">
-        <OuiText size="xs" color="subdued">
-          <strong>Alternative:</strong> {alternative.type} &mdash;{' '}
-          {alternative.reason}
-        </OuiText>
-      </div>
-      {selectedOption === 'customize' && (
-        <>
-          <OuiSpacer size="l" />
-          <div className="onboardWizard__storageCustomize">
-            <OuiText size="xs">
-              <strong>Customize configuration</strong>
-            </OuiText>
-            <OuiSpacer size="s" />
-            <OuiText size="xs" color="subdued">
-              <p style={{ margin: 0 }}>
-                Adjust resource type, OCU allocation, replicas, retention policy,
-                and index naming from the Data Management page after setup.
-              </p>
-            </OuiText>
-          </div>
-        </>
       )}
-      {selectedOption === 'store-existing' && (
+
+      {hasSelection && (
         <>
-          <OuiSpacer size="l" />
-          <div className="onboardWizard__storageExisting">
-            <OuiText size="xs">
-              <strong>Select existing resource</strong>
-            </OuiText>
-            <OuiSpacer size="s" />
-            <div className="onboardWizard__storageExistingList">
-              <div className="onboardWizard__storageExistingItem">
-                <OuiIcon type="logo_opensearch" size="s" />
-                <div>
-                  <OuiText size="xs">
-                    <strong>prod-observability-cluster</strong>
-                  </OuiText>
-                  <OuiText size="xs" color="subdued">
-                    Serverless Collection &middot; us-west-2 &middot; Active
-                  </OuiText>
+          {/* Per-field enrichment plan */}
+          <div className="onboardWizard__summaryList">
+            {enrichedNames.map((name) => {
+              const cfg = enrichConfig[name];
+              return (
+                <div key={name} className="onboardWizard__summaryRow" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <OuiText size="xs"><strong>{name}</strong></OuiText>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <span className="onboardWizard__envBadge">{cfg.language === 'multi' ? 'Multi-language' : 'English'}</span>
+                    <span className="onboardWizard__envBadge">{MODEL_TYPE_LABEL[cfg.modelType]}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="onboardWizard__storageExistingItem">
-                <OuiIcon type="logo_opensearch" size="s" />
-                <div>
-                  <OuiText size="xs">
-                    <strong>dev-telemetry-collection</strong>
-                  </OuiText>
-                  <OuiText size="xs" color="subdued">
-                    Serverless Collection &middot; us-east-1 &middot; Active
-                  </OuiText>
-                </div>
+              );
+            })}
+          </div>
+
+          {/* Adaptive model card(s) */}
+          <OuiSpacer size="m" />
+          <div className="onboardWizard__storageCard">
+            <div className="onboardWizard__storageCardHeader">
+              <OuiIcon type="machineLearningApp" size="l" />
+              <div>
+                <OuiText size="s"><strong>Models in use</strong></OuiText>
+                <OuiText size="xs" color="subdued">
+                  {enrichedNames.length} field{enrichedNames.length > 1 ? 's' : ''} enriched
+                </OuiText>
               </div>
             </div>
+            <OuiSpacer size="m" />
+            <div className="onboardWizard__storageSpecs">
+              {usesDense && (
+                <div className="onboardWizard__storageSpecRow">
+                  <OuiText size="xs" color="subdued">Dense</OuiText>
+                  <OuiText size="xs"><strong>{MODEL_BY_TYPE.dense} &middot; 384d</strong></OuiText>
+                </div>
+              )}
+              {usesSparse && (
+                <div className="onboardWizard__storageSpecRow">
+                  <OuiText size="xs" color="subdued">Sparse</OuiText>
+                  <OuiText size="xs"><strong>{MODEL_BY_TYPE.sparse}</strong></OuiText>
+                </div>
+              )}
+              {usesCustom && (
+                <div className="onboardWizard__storageSpecRow">
+                  <OuiText size="xs" color="subdued">Custom</OuiText>
+                  <OuiText size="xs"><strong>Fine-tuned model</strong></OuiText>
+                </div>
+              )}
+            </div>
           </div>
+
+          {/* Generated pipeline */}
+          <OuiSpacer size="m" />
+          <div className="onboardWizard__codeBlock">
+            <OuiCode language="json" className="onboardWizard__code">
+              {INGEST_PIPELINE_JSON(enrichConfig)}
+            </OuiCode>
+          </div>
+          <OuiSpacer size="xs" />
+          <OuiText size="xs" color="subdued">
+            <p style={{ margin: 0 }}>This ingest pipeline will be created automatically.</p>
+          </OuiText>
         </>
       )}
-      <OuiSpacer size="m" />
-      <OuiText size="xs" color="subdued">
-        <p style={{ margin: 0 }}>
-          You can change storage settings later from the Data Management page.
-        </p>
-      </OuiText>
     </div>
   );
 };
 
-const SummaryPanel = ({ allSelections }) => {
-  const summaryRows = [
-    {
-      label: 'Services instrumented',
-      stepIdx: 0,
-      valueMap: {
-        application: '14 services',
-        cloud: '14 services',
-        sample: '14 services',
-      },
-    },
-    {
-      label: 'Environment',
-      stepIdx: 1,
-      valueMap: {
-        opentelemetry: 'OpenTelemetry',
-        eks: 'EKS',
-        kubernetes: 'Kubernetes',
-        other: 'Other',
-      },
-    },
-    {
-      label: 'Telemetry storage',
-      stepIdx: 4,
-      valueMap: {
-        'looks-good': 'OpenSearch Serverless Collection (Optimized engine)',
-        customize: 'Custom configuration',
-        'store-existing': 'Existing resource',
-      },
-      // When user chose "Instrument application" or "EKS", 1d is skipped — auto-recommended
-      skippedWhen: () => allSelections[0] === 'application' || allSelections[1] === 'eks',
-      skippedLabel: 'OpenSearch Serverless Collection (Optimized engine)',
-    },
-  ];
+const ReviewSummaryPanel = ({ useCase, importOption, enrichConfig }) => {
+  const template = INDEX_TEMPLATES[useCase] || INDEX_TEMPLATES['custom'];
+  const source = IMPORT_SOURCE_META[importOption] || IMPORT_SOURCE_META['upload-file'];
+  const enrichedNames = getEnrichedFieldNames(enrichConfig);
+  const semanticCount = enrichedNames.length;
 
   return (
     <div className="onboardWizard__rightContent">
       <RightPanelHeader
-        icon="checkInCircleFilled"
-        title="Configuration Summary"
-        subtitle="Review before deploying"
+        icon="inspect"
+        title="Review & Confirm"
+        subtitle="What I\u2019ll create"
       />
       <OuiSpacer size="l" />
       <div className="onboardWizard__summaryList">
-        {summaryRows.map((row) => {
-          // If this step was skipped due to earlier selection, show skipped label
-          if (row.skippedWhen && row.skippedWhen()) {
-            return (
-              <div key={row.stepIdx} className="onboardWizard__summaryRow">
-                <OuiText size="xs" color="subdued">
-                  {row.label}
-                </OuiText>
+        <div className="onboardWizard__summaryRow">
+          <OuiText size="xs" color="subdued">Collection</OuiText>
+          <OuiText size="s"><strong>{template.name}-collection</strong></OuiText>
+          <OuiText size="xs" color="subdued">
+            <p style={{ margin: 0 }}>OpenSearch Serverless &middot; Search &middot; us-west-2</p>
+          </OuiText>
+        </div>
+        <div className="onboardWizard__summaryRow">
+          <OuiText size="xs" color="subdued">Index &amp; mapping</OuiText>
+          <OuiText size="s"><strong>{template.name}</strong></OuiText>
+          <OuiText size="xs" color="subdued">
+            <p style={{ margin: 0 }}>{template.fields.length} fields inferred from your data</p>
+          </OuiText>
+        </div>
+        <div className="onboardWizard__summaryRow">
+          <OuiText size="xs" color="subdued">Semantic search</OuiText>
+          <OuiText size="s">
+            <strong>{semanticCount > 0 ? `${semanticCount} field${semanticCount > 1 ? 's' : ''} enriched` : 'Keyword only'}</strong>
+          </OuiText>
+          <OuiText size="xs" color="subdued">
+            <p style={{ margin: 0 }}>
+              {semanticCount > 0
+                ? `Enrichment pipeline for ${enrichedNames.join(', ')}`
+                : 'No embedding pipeline will be created'}
+            </p>
+          </OuiText>
+        </div>
+        <div className="onboardWizard__summaryRow">
+          <OuiText size="xs" color="subdued">Data source</OuiText>
+          <OuiText size="s"><strong>{source.label}</strong></OuiText>
+          <OuiText size="xs" color="subdued">
+            <p style={{ margin: 0 }}>{source.detail} &middot; {source.docs} documents</p>
+          </OuiText>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ProvisioningLivePanel = ({ useCase, enrichConfig }) => {
+  const detectedFields = getDetectedFields(useCase);
+  const searchableFields = detectedFields.filter((f) => f.searchable);
+  const hasSemantic = getEnrichedFieldNames(enrichConfig).length > 0;
+  const activeStrategy = deriveBenchmarkStrategy(enrichConfig);
+
+  // The ordered list of resources to provision (pipeline only when semantic).
+  const steps = PROVISION_STEPS.filter((s) => !s.semanticOnly || hasSemantic);
+
+  const [completed, setCompleted] = useState(0);
+  const isLive = completed >= steps.length;
+
+  // Reveal each provisioning step in sequence, then surface the live results.
+  useEffect(() => {
+    setCompleted(0);
+    const timers = [];
+    for (let i = 1; i <= steps.length; i++) {
+      timers.push(setTimeout(() => setCompleted(i), i * 900));
+    }
+    return () => timers.forEach(clearTimeout);
+  }, [steps.length]);
+
+  return (
+    <div className="onboardWizard__rightContent">
+      <RightPanelHeader
+        icon={isLive ? 'checkInCircleFilled' : 'compute'}
+        title={isLive ? 'Setup Complete' : 'Provisioning'}
+        subtitle={isLive ? 'Your search is ready to use' : 'Creating your resources'}
+      />
+      <OuiSpacer size="l" />
+
+      {/* Provisioning checklist */}
+      <div className="onboardWizard__checklist">
+        {steps.map((s, i) => {
+          const done = i < completed;
+          const active = i === completed;
+          return (
+            <div key={s.key} className="onboardWizard__checklistItem">
+              {done ? (
+                <OuiIcon type="checkInCircleFilled" size="m" color="success" />
+              ) : active ? (
+                <OuiLoadingSpinner size="m" />
+              ) : (
+                <OuiIcon type="dot" size="m" color="subdued" />
+              )}
+              <div className="onboardWizard__checklistText">
                 <OuiText size="s">
-                  <strong>{row.skippedLabel}</strong>
+                  <strong>{s.label}</strong>
                 </OuiText>
               </div>
-            );
-          }
-          const val = allSelections[row.stepIdx];
-          let display = '\u2014';
-          if (Array.isArray(val) && val.length > 0) {
-            display = val.map((v) => row.valueMap[v] || v).join(', ');
-          } else if (val && !Array.isArray(val)) {
-            display = row.valueMap[val] || val;
-          }
-          return (
-            <div key={row.stepIdx} className="onboardWizard__summaryRow">
-              <OuiText size="xs" color="subdued">
-                {row.label}
-              </OuiText>
-              <OuiText size="s">
-                <strong>{display}</strong>
-              </OuiText>
             </div>
           );
         })}
       </div>
-    </div>
-  );
-};
 
-// Generates initial data points for the streaming area chart
-const generateInitialData = (points, baseValue, variance) =>
-  Array.from({ length: points }, () =>
-    baseValue + Math.floor(Math.random() * variance)
-  );
-
-// Attempt a smooth cubic bezier path through points (mimics monotone interpolation)
-const buildSmoothPath = (points, width, height, padding) => {
-  if (points.length < 2) return '';
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-
-  const coords = points.map((val, i) => ({
-    x: (i / (points.length - 1)) * width,
-    y: padding + (1 - (val - min) / range) * (height - padding * 2),
-  }));
-
-  // Build a smooth cubic bezier path
-  let path = `M ${coords[0].x},${coords[0].y}`;
-  for (let i = 1; i < coords.length; i++) {
-    const prev = coords[i - 1];
-    const curr = coords[i];
-    const cpx = (prev.x + curr.x) / 2;
-    path += ` C ${cpx},${prev.y} ${cpx},${curr.y} ${curr.x},${curr.y}`;
-  }
-  return path;
-};
-
-// A single streaming area chart using pure SVG — gradient fill like shadcn's area chart
-const LiveStreamAreaChart = ({ color, data }) => {
-  const width = 320;
-  const height = 80;
-  const padding = 4;
-  const gradientId = useMemo(
-    () => `area-grad-${color.replace('#', '')}`,
-    [color]
-  );
-
-  // Build a sharp polyline (no smooth curves — blueprint style)
-  const points = data.map((val, i) => {
-    const max = Math.max(...data);
-    const x = (i / (data.length - 1)) * width;
-    const y = padding + ((1 - val / max) * (height - padding * 2));
-    return `${x},${y}`;
-  });
-  const linePath = `M ${points.join(' L ')}`;
-  const areaPath = `${linePath} L ${width},${height} L 0,${height} Z`;
-
-  return (
-    <svg
-      className="onboardWizard__areaChart"
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      aria-hidden="true">
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.12" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {/* Horizontal grid — dashed, blueprint style */}
-      {[0.25, 0.5, 0.75].map((ratio, i) => (
-        <line key={i} x1="0" y1={height * ratio} x2={width} y2={height * ratio}
-          stroke="currentColor" strokeWidth="0.5" strokeDasharray="3 4" opacity="0.12" />
-      ))}
-      {/* Baseline */}
-      <line x1="0" y1={height} x2={width} y2={height}
-        stroke="currentColor" strokeWidth="0.7" opacity="0.15" />
-      <path d={areaPath} fill={`url(#${gradientId})`} />
-      <path
-        d={linePath}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.8"
-        strokeLinecap="square"
-        strokeLinejoin="miter"
-      />
-    </svg>
-  );
-};
-
-const LiveCountersPanel = () => {
-  const MAX_POINTS = 30;
-
-  const [counts, setCounts] = useState({
-    logs: 1204,
-    metrics: 8491,
-    traces: 342,
-  });
-
-  const [chartData, setChartData] = useState({
-    logs: generateInitialData(MAX_POINTS, 12, 8),
-    metrics: generateInitialData(MAX_POINTS, 18, 12),
-    traces: generateInitialData(MAX_POINTS, 6, 4),
-  });
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCounts((prev) => ({
-        logs: prev.logs + Math.floor(Math.random() * 15) + 5,
-        metrics: prev.metrics + Math.floor(Math.random() * 25) + 10,
-        traces: prev.traces + Math.floor(Math.random() * 8) + 3,
-      }));
-
-      setChartData((prev) => ({
-        logs: [...prev.logs.slice(1), 8 + Math.floor(Math.random() * 12)],
-        metrics: [...prev.metrics.slice(1), 12 + Math.floor(Math.random() * 18)],
-        traces: [...prev.traces.slice(1), 3 + Math.floor(Math.random() * 8)],
-      }));
-    }, 1200);
-    return () => clearInterval(interval);
-  }, []);
-
-  const counters = [
-    {
-      key: 'logs',
-      icon: 'document',
-      label: 'Logs',
-      count: counts.logs,
-      rate: '+12/s',
-      color: '#006DE4',
-    },
-    {
-      key: 'metrics',
-      icon: 'vis_area',
-      label: 'Metrics',
-      count: counts.metrics,
-      rate: '+18/s',
-      color: '#00BFB3',
-    },
-    {
-      key: 'traces',
-      icon: 'branch',
-      label: 'Traces',
-      count: counts.traces,
-      rate: '+6/s',
-      color: '#F5A700',
-    },
-  ];
-
-  return (
-    <div className="onboardWizard__rightContent">
-      <RightPanelHeader
-        icon="pulse"
-        title="Live Data Collection"
-        subtitle="Watching your data flow in real-time"
-      />
-      <OuiSpacer size="l" />
-      <div className="onboardWizard__liveCounters">
-        {counters.map((c) => (
-          <div key={c.key} className="onboardWizard__counterRow onboardWizard__counterRow--withChart">
-            <div className="onboardWizard__counterMeta">
-              <div className="onboardWizard__counterIcon">
-                <OuiIcon type={c.icon} size="l" color={c.color} />
-              </div>
-              <div className="onboardWizard__counterInfo">
-                <OuiText size="xs" color="subdued">
-                  {c.label}
-                </OuiText>
-                <div className="onboardWizard__counterValue">
-                  <span className="onboardWizard__counterNumber">
-                    {c.count.toLocaleString()}
-                  </span>
-                  <span
-                    className="onboardWizard__counterRate"
-                    style={{ color: c.color }}>
-                    {c.rate}
-                  </span>
-                </div>
-              </div>
+      {isLive && (
+        <>
+          <OuiSpacer size="l" />
+          <div className="onboardWizard__storageSpecs">
+            <div className="onboardWizard__storageSpecRow">
+              <OuiText size="xs" color="subdued">Documents indexed</OuiText>
+              <OuiText size="xs"><strong>100</strong></OuiText>
             </div>
-            <div className="onboardWizard__counterChart">
-              <LiveStreamAreaChart
-                color={c.color}
-                data={chartData[c.key]}
-              />
+            <div className="onboardWizard__storageSpecRow">
+              <OuiText size="xs" color="subdued">Searchable fields</OuiText>
+              <OuiText size="xs"><strong>{searchableFields.length}</strong></OuiText>
+            </div>
+            <div className="onboardWizard__storageSpecRow">
+              <OuiText size="xs" color="subdued">Semantic search</OuiText>
+              <OuiText size="xs"><strong>{hasSemantic ? 'Enabled' : 'Off'}</strong></OuiText>
+            </div>
+            <div className="onboardWizard__storageSpecRow">
+              <OuiText size="xs" color="subdued">Index status</OuiText>
+              <OuiText size="xs"><strong style={{ color: '#5CB198' }}>Active</strong></OuiText>
             </div>
           </div>
-        ))}
-      </div>
-      <OuiSpacer size="l" />
-      <div className="onboardWizard__collectionHealth">
-        <OuiIcon type="checkInCircleFilled" size="s" color="success" />
-        <OuiText size="xs">
-          <strong>Healthy</strong> &middot; Uptime: 2m 34s &middot; Avg latency:
-          12ms
-        </OuiText>
-      </div>
+
+          {/* Benchmark — reflects the retrieval strategy the user configured */}
+          <OuiSpacer size="l" />
+          <OuiText size="xs" color="subdued">
+            <strong>Expected retrieval performance</strong>
+          </OuiText>
+          <OuiSpacer size="xs" />
+          <OuiText size="xs" color="subdued">
+            <p style={{ margin: 0 }}>
+              Illustrative values; actual results vary by workload. Your configuration
+              maps to the highlighted strategy.
+            </p>
+          </OuiText>
+          <OuiSpacer size="s" />
+          <table className="onboardWizard__benchTable">
+            <thead>
+              <tr>
+                <th>Strategy</th>
+                <th>NDCG@10</th>
+                <th>P99 (ms)</th>
+                <th>Index</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {BENCHMARK_ROWS.map((row) => (
+                <tr
+                  key={row.key}
+                  className={row.key === activeStrategy ? 'onboardWizard__benchRow--active' : undefined}>
+                  <td>
+                    {row.strategy}
+                    {row.key === activeStrategy && (
+                      <span className="onboardWizard__benchYou">Your setup</span>
+                    )}
+                  </td>
+                  <td>{row.ndcg}</td>
+                  <td>{row.p99}</td>
+                  <td>{row.indexSize}</td>
+                  <td>{row.cost}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 };
@@ -890,29 +845,6 @@ const RightPanelHeader = ({ icon, title, subtitle }) => (
   </div>
 );
 
-const IngestRow = ({ label, rate, color }) => {
-  const dots = Array.from({ length: 12 }, (_, i) => (
-    <span
-      key={i}
-      className="onboardWizard__sparkDot"
-      style={{
-        backgroundColor: color,
-        opacity: 0.4 + Math.random() * 0.6,
-      }}
-    />
-  ));
-
-  return (
-    <div className="onboardWizard__ingestRow">
-      <span className="onboardWizard__ingestLabel">{label}</span>
-      <span className="onboardWizard__ingestRate" style={{ color }}>
-        {rate}
-      </span>
-      <div className="onboardWizard__sparkline">{dots}</div>
-    </div>
-  );
-};
-
 // ─────────────────────────────────────────────
 // RIGHT PANEL CONTENT ROUTER
 // ─────────────────────────────────────────────
@@ -922,24 +854,45 @@ const RightPanelContent = ({
   selectedOption,
   confirmed,
   allSelections,
+  useCase,
+  importStage,
+  connectSource,
 }) => {
   const { rightPanel } = step;
 
   switch (rightPanel.contentType) {
-    case 'getting-started':
-      return <GettingStartedPanel />;
-    case 'environment':
-      return <EnvironmentPanel selectedOption={selectedOption} />;
-    case 'eks-discovery':
-      return <EKSDiscoveryPanel discoveryPhase={confirmed ? 'found' : (selectedOption ? 'scanning' : 'scanning')} />;
-    case 'collector-setup':
-      return <CollectorSetupPanel confirmed={confirmed} />;
-    case 'telemetry-storage':
-      return <TelemetryStoragePanel selectedOption={selectedOption} />;
-    case 'summary':
-      return <SummaryPanel allSelections={allSelections} />;
-    case 'live-counters':
-      return <LiveCountersPanel />;
+    case 'import-data':
+      return (
+        <ImportDataPanel
+          selectedOption={selectedOption}
+          importStage={importStage}
+          connectSource={connectSource}
+        />
+      );
+    case 'mapping-preview':
+      return <MappingPreviewPanel useCase={useCase} />;
+    case 'semantic-config':
+      return (
+        <SemanticConfigPanel
+          enrichConfig={selectedOption && typeof selectedOption === 'object' ? selectedOption : {}}
+          useCase={useCase}
+        />
+      );
+    case 'review-summary':
+      return (
+        <ReviewSummaryPanel
+          useCase={useCase}
+          importOption={allSelections[0]}
+          enrichConfig={allSelections[2]}
+        />
+      );
+    case 'provisioning-live':
+      return (
+        <ProvisioningLivePanel
+          useCase={useCase}
+          enrichConfig={allSelections[2]}
+        />
+      );
     default:
       return (
         <div className="onboardWizard__rightContent">
@@ -959,6 +912,7 @@ const RightPanelContent = ({
   }
 };
 
+
 // ─────────────────────────────────────────────
 // MAIN PAGE COMPONENT
 // ─────────────────────────────────────────────
@@ -972,6 +926,13 @@ export const OnboardingWizardPage = () => {
   const [streamedText, setStreamedText] = useState('');
   const [isStreaming, setIsStreaming] = useState(true);
   const [rightPanelFade, setRightPanelFade] = useState(true);
+  // Staged import sub-flow (step 1 only). `importStage` is null until the user
+  // picks a method that needs a follow-up action:
+  //   'upload'  → waiting for the user to choose a file
+  //   'connect' → waiting for the user to pick a data source
+  // `connectSource` holds the chosen source key once selected.
+  const [importStage, setImportStage] = useState(null);
+  const [connectSource, setConnectSource] = useState(null);
   const feedRef = useRef(null);
   const feedEndRef = useRef(null);
   const streamTimers = useRef([]);
@@ -979,19 +940,31 @@ export const OnboardingWizardPage = () => {
   const totalSteps = STEPS.length;
   const totalMainSteps = STEPS[STEPS.length - 1].mainStep;
   const step = STEPS[currentStep];
-  const currentSelection = selections[currentStep] ?? step.defaultSelection ?? null;
+  const currentSelection = selections[currentStep] ?? null;
   const isConfirmed = !!confirmedSteps[currentStep];
+
+  // Derive use case from the step 0 import choice (sample datasets map to a
+  // template; uploads / live sources fall back to `custom`).
+  const useCase = deriveUseCase(selections[0]);
+
+  // Get dynamic options for the semantic enrichment step
+  const getStepOptions = (stepDef) => {
+    if (stepDef.dynamicOptions) {
+      return getDetectedFields(useCase).map((f) => ({
+        key: f.name,
+        label: f.name,
+        description: `${f.type} field — will generate ${f.name}_embedding vector`,
+      }));
+    }
+    return stepDef.options;
+  };
 
   // Stream the current step's question text when step changes
   useEffect(() => {
-    // Clear previous timers
     streamTimers.current.forEach(clearTimeout);
     streamTimers.current = [];
 
-    // Use dynamicQuestion if available, passing selections for context
-    const fullText = step.dynamicQuestion
-      ? step.dynamicQuestion(selections)
-      : step.question;
+    const fullText = step.question;
     const tokens = fullText.split(/(\s+)/);
     setStreamedText('');
     setIsStreaming(true);
@@ -1014,26 +987,18 @@ export const OnboardingWizardPage = () => {
     };
   }, [currentStep, step.question]);
 
-  // Auto-discovery step: auto-confirm after scanning animation
+  // Seed the step 2 enrichment config with suggestions when the step is shown,
+  // so the right panel reflects the suggested fields right away.
   useEffect(() => {
-    if (step.optionType === 'auto-discovery' && !isConfirmed && !isProcessing) {
-      // Wait for the streaming text to finish, then auto-confirm
-      const streamDuration = step.question.split(/(\s+)/).length * 30 + 500;
-      const timer = setTimeout(() => {
-        setIsProcessing(true);
-        // Show scanning for 2 seconds, then confirm (discovery found)
-        setTimeout(() => {
-          setConfirmedSteps((prev) => ({ ...prev, [currentStep]: true }));
-          setIsProcessing(false);
-          // Update the streamed text to the discovery result
-          setStreamedText(
-            'We found 3 EKS clusters and 14 services instrumented with OpenTelemetry. Waiting for additional data...'
-          );
-        }, 2000);
-      }, streamDuration);
-      return () => clearTimeout(timer);
+    if (
+      step.optionType === 'enrich' &&
+      !isConfirmed &&
+      !(selections[currentStep] && typeof selections[currentStep] === 'object')
+    ) {
+      setSelections((prev) => ({ ...prev, [currentStep]: buildDefaultEnrichConfig(useCase) }));
     }
-  }, [currentStep, step.optionType, isConfirmed, isProcessing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, step.optionType, useCase]);
 
   // Fade in the right panel when step changes
   useEffect(() => {
@@ -1042,7 +1007,7 @@ export const OnboardingWizardPage = () => {
     return () => clearTimeout(timer);
   }, [currentStep]);
 
-  // Auto-scroll feed to bottom when conversation changes
+  // Auto-scroll feed to bottom
   useEffect(() => {
     requestAnimationFrame(() => {
       if (feedEndRef.current) {
@@ -1051,119 +1016,128 @@ export const OnboardingWizardPage = () => {
     });
   }, [currentStep, isConfirmed, isProcessing, streamedText]);
 
-  const handleChipSelect = useCallback(
-    (key) => {
-      if (isConfirmed || isProcessing) return;
-
-      // Step 1c (OTel collector, index 3) "Go back" navigates back to 1b
-      if (currentStep === 3 && key === 'goback') {
-        setCurrentStep(1);
-        return;
-      }
-
-      setSelections((prev) => ({ ...prev, [currentStep]: key }));
+  // Generic confirm+advance used by most steps.
+  const confirmCurrentStep = useCallback(
+    (delay = 1200) => {
       setIsProcessing(true);
       setTimeout(() => {
         setConfirmedSteps((prev) => ({ ...prev, [currentStep]: true }));
         setIsProcessing(false);
-      }, 1200);
+      }, delay);
     },
-    [currentStep, isConfirmed, isProcessing]
+    [currentStep]
   );
 
-  const handleMultiSelectToggle = useCallback(
+  const handleChipSelect = useCallback(
     (key) => {
       if (isConfirmed || isProcessing) return;
-      const current = Array.isArray(selections[currentStep])
-        ? selections[currentStep]
-        : [];
-      const updated = current.includes(key)
-        ? current.filter((k) => k !== key)
-        : [...current, key];
-      setSelections((prev) => ({ ...prev, [currentStep]: updated }));
+
+      // Step 1 import: some methods need a follow-up action in the left thread
+      // (choose a file, pick a data source) before the import is finalized.
+      const option = (step.options || []).find((o) => o.key === key);
+      if (option && option.requiresAction) {
+        setSelections((prev) => ({ ...prev, [currentStep]: key }));
+        setImportStage(option.requiresAction);
+        setConnectSource(null);
+        return;
+      }
+
+      setSelections((prev) => ({ ...prev, [currentStep]: key }));
+      confirmCurrentStep();
     },
-    [currentStep, isConfirmed, isProcessing, selections]
+    [currentStep, isConfirmed, isProcessing, step.options, confirmCurrentStep]
   );
 
-  const handleMultiSelectConfirm = useCallback(() => {
+  // Finalize the import once the user completes the required action
+  // (file chosen, or data source picked + connect clicked).
+  const handleImportFinalize = useCallback(() => {
     if (isProcessing) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      setConfirmedSteps((prev) => ({ ...prev, [currentStep]: true }));
-      setIsProcessing(false);
-    }, 1200);
-  }, [currentStep, isProcessing]);
+    confirmCurrentStep();
+  }, [isProcessing, confirmCurrentStep]);
+
+  const handleConnectSourcePick = useCallback(
+    (sourceKey) => {
+      if (isProcessing || isConfirmed) return;
+      setConnectSource(sourceKey);
+    },
+    [isProcessing, isConfirmed]
+  );
+
+  // Abandon the staged import action and return to the method chips.
+  const handleImportBack = useCallback(() => {
+    if (isProcessing) return;
+    setImportStage(null);
+    setConnectSource(null);
+    setSelections((prev) => {
+      const next = { ...prev };
+      delete next[currentStep];
+      return next;
+    });
+  }, [isProcessing, currentStep]);
+
+  // Ensure the step 2 enrichment config exists (lazily seeded with our
+  // suggestions) and return it.
+  const ensureEnrichConfig = useCallback(() => {
+    const existing = selections[currentStep];
+    if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+      return existing;
+    }
+    const seeded = buildDefaultEnrichConfig(useCase);
+    setSelections((prev) => ({ ...prev, [currentStep]: seeded }));
+    return seeded;
+  }, [selections, currentStep, useCase]);
+
+  // Update a single field's enrichment config (enrich flag, language, model).
+  const handleEnrichFieldChange = useCallback(
+    (fieldName, patch) => {
+      if (isConfirmed || isProcessing) return;
+      setSelections((prev) => {
+        const base =
+          prev[currentStep] && typeof prev[currentStep] === 'object' && !Array.isArray(prev[currentStep])
+            ? prev[currentStep]
+            : buildDefaultEnrichConfig(useCase);
+        return {
+          ...prev,
+          [currentStep]: {
+            ...base,
+            [fieldName]: { ...base[fieldName], ...patch },
+          },
+        };
+      });
+    },
+    [currentStep, isConfirmed, isProcessing, useCase]
+  );
+
+  const handleEnrichConfirm = useCallback(() => {
+    if (isProcessing) return;
+    ensureEnrichConfig();
+    confirmCurrentStep();
+  }, [isProcessing, ensureEnrichConfig, confirmCurrentStep]);
 
   const handleSkip = useCallback(() => {
     if (isConfirmed || isProcessing) return;
-    setSelections((prev) => ({ ...prev, [currentStep]: [] }));
-    setIsProcessing(true);
-    setTimeout(() => {
-      setConfirmedSteps((prev) => ({ ...prev, [currentStep]: true }));
-      setIsProcessing(false);
-    }, 800);
-  }, [currentStep, isConfirmed, isProcessing]);
+    // An empty config means "no fields enriched".
+    setSelections((prev) => ({ ...prev, [currentStep]: {} }));
+    confirmCurrentStep(800);
+  }, [currentStep, isConfirmed, isProcessing, confirmCurrentStep]);
 
-  // Auto-advance to next step after confirmation (with brief delay to show confirmation)
-  // Branching logic from sub-step 1b (index 1):
-  //   - "opentelemetry" → go to 1c (OTel collector, index 3)
-  //   - "eks" → go to EKS discovery (index 2), which auto-advances to Step 2 (Review)
-  //   - Other → go to 1c (OTel collector, index 3)
-  // If user selected "Instrument application" in step 1a:
-  //   - Skip sub-step 1d (index 4, telemetry storage) 
+  // Auto-advance to next step after confirmation
   useEffect(() => {
     if (isConfirmed && currentStep < totalSteps - 1) {
-      const currentStepDef = STEPS[currentStep];
-
-      // EKS Discovery auto-advance: wait 5 seconds then go to Step 2 (review/confirm)
-      if (currentStepDef.optionType === 'auto-discovery') {
-        const timer = setTimeout(() => {
-          // Find the index of Step 2 (Review and confirm, mainStep === 2)
-          const step2Idx = STEPS.findIndex((s) => s.mainStep === 2);
-          setCurrentStep(step2Idx);
-        }, 5000);
-        return () => clearTimeout(timer);
-      }
-
       const timer = setTimeout(() => {
-        setCurrentStep((prev) => {
-          let nextStep = prev + 1;
-
-          // From sub-step 1b (index 1): branch based on environment selection
-          if (prev === 1) {
-            if (selections[1] === 'eks') {
-              // Go to EKS discovery (index 2)
-              return 2;
-            }
-            // OpenTelemetry or other → skip EKS discovery, go to OTel collector (index 3)
-            return 3;
-          }
-
-          // From EKS discovery (index 2): this is handled by auto-advance above, 
-          // but as safety: go to Step 2 (Review)
-          if (prev === 2) {
-            const step2Idx = STEPS.findIndex((s) => s.mainStep === 2);
-            return step2Idx;
-          }
-
-          if (selections[0] === 'application') {
-            // From 1c (index 3) → skip 1d (index 4), jump to Review (step 2, index 5)
-            if (nextStep === 4) {
-              return 5;
-            }
-          }
-          return nextStep;
-        });
+        setCurrentStep((prev) => prev + 1);
+        // Clear the step 1 import sub-flow as we leave it.
+        setImportStage(null);
+        setConnectSource(null);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [isConfirmed, currentStep, totalSteps, selections]);
+  }, [isConfirmed, currentStep, totalSteps]);
 
   const handleStepClick = useCallback(
     (stepIdx) => {
       if (stepIdx < currentStep && confirmedSteps[stepIdx]) {
         setCurrentStep(stepIdx);
-        // Reset subsequent steps
         const newSelections = { ...selections };
         const newConfirmed = { ...confirmedSteps };
         for (let i = stepIdx; i < totalSteps; i++) {
@@ -1172,16 +1146,14 @@ export const OnboardingWizardPage = () => {
         }
         setSelections(newSelections);
         setConfirmedSteps(newConfirmed);
+        // Reset the step 1 import sub-flow when jumping back.
+        setImportStage(null);
+        setConnectSource(null);
       }
     },
     [currentStep, confirmedSteps, selections, totalSteps]
   );
 
-  const handleFinishLater = () => {
-    window.location.hash = '/sample-pages';
-  };
-
-  // Last step: selections navigate away
   const handleFinalNavigation = () => {
     window.location.hash = '/sample-pages';
   };
@@ -1189,11 +1161,16 @@ export const OnboardingWizardPage = () => {
   const handleSend = () => {
     const text = message.trim();
     if (!text) return;
-    const matchedOption = step.options.find(
-      (opt) => opt.label.toLowerCase() === text.toLowerCase()
-    );
-    if (matchedOption) {
-      handleChipSelect(matchedOption.key);
+    // Typed shortcuts only apply to chip steps; the enrich step is edited via
+    // its per-field controls, not free text.
+    if (step.optionType === 'chips') {
+      const options = getStepOptions(step);
+      const matchedOption = options.find(
+        (opt) => opt.label.toLowerCase() === text.toLowerCase()
+      );
+      if (matchedOption) {
+        handleChipSelect(matchedOption.key);
+      }
     }
     setMessage('');
   };
@@ -1207,20 +1184,17 @@ export const OnboardingWizardPage = () => {
 
   const isLastStep = currentStep === totalSteps - 1;
 
-  // Build the conversation messages from completed steps + current step
+  // Build the conversation messages
   const buildConversation = () => {
     const messages = [];
     const currentMainStep = step.mainStep;
 
-    // Only show chat history from sub-steps within the same main step
     for (let i = 0; i < currentStep; i++) {
       const pastStep = STEPS[i];
       const pastSelection = selections[i];
 
-      // Skip steps from previous main steps — only show sub-step history
       if (pastStep.mainStep !== currentMainStep) continue;
 
-      // Assistant question
       messages.push(
         <div key={`q-${i}`} className="threadPage__message threadPage__message--assistant">
           <div className="threadPage__bubble threadPage__bubble--assistant">
@@ -1231,9 +1205,8 @@ export const OnboardingWizardPage = () => {
         </div>
       );
 
-      // User selection as user message
       if (pastSelection) {
-        const selectionLabel = getSelectionLabel(pastStep, pastSelection);
+        const selectionLabel = getSelectionLabel(pastStep, pastSelection, useCase);
         messages.push(
           <div key={`a-${i}`} className="threadPage__message threadPage__message--user">
             <div className="threadPage__bubble threadPage__bubble--user">
@@ -1245,7 +1218,6 @@ export const OnboardingWizardPage = () => {
         );
       }
 
-      // Confirmation
       if (confirmedSteps[i] && pastStep.confirmation) {
         messages.push(
           <div key={`c-${i}`} className="threadPage__message threadPage__message--assistant">
@@ -1262,7 +1234,7 @@ export const OnboardingWizardPage = () => {
       }
     }
 
-    // Current step: assistant question (with typing animation)
+    // Current step question
     messages.push(
       <div key={`q-${currentStep}`} className="threadPage__message threadPage__message--assistant">
         <div className="threadPage__bubble threadPage__bubble--assistant">
@@ -1271,10 +1243,9 @@ export const OnboardingWizardPage = () => {
               <p key={idx}>{paragraph}</p>
             ))}
           </OuiText>
-          {!isStreaming && !isConfirmed && (
+          {!isStreaming && !isConfirmed && !importStage && (
             <>
               <OuiSpacer size="m" />
-              {/* Render interactive options after typing completes */}
               {renderOptions()}
             </>
           )}
@@ -1282,9 +1253,35 @@ export const OnboardingWizardPage = () => {
       </div>
     );
 
-    // If the current step has a selection, show user message
+    // Staged import sub-flow (step 1): show the picked method as a user turn,
+    // then an assistant follow-up that asks for the required action.
+    if (importStage && !isConfirmed) {
+      const methodOption = (step.options || []).find(
+        (o) => o.key === currentSelection
+      );
+      messages.push(
+        <div key={`import-pick-${currentStep}`} className="threadPage__message threadPage__message--user">
+          <div className="threadPage__bubble threadPage__bubble--user">
+            <OuiText size="s">
+              <p>{methodOption ? methodOption.label : 'Import data'}</p>
+            </OuiText>
+          </div>
+        </div>
+      );
+      if (!isProcessing) {
+        messages.push(
+          <div key={`import-action-${currentStep}`} className="threadPage__message threadPage__message--assistant">
+            <div className="threadPage__bubble threadPage__bubble--assistant">
+              {renderImportAction()}
+            </div>
+          </div>
+        );
+      }
+    }
+
+    // User selection for current step
     if (currentSelection && isConfirmed) {
-      const selectionLabel = getSelectionLabel(step, currentSelection);
+      const selectionLabel = getSelectionLabel(step, currentSelection, useCase);
       messages.push(
         <div key={`a-${currentStep}`} className="threadPage__message threadPage__message--user">
           <div className="threadPage__bubble threadPage__bubble--user">
@@ -1310,7 +1307,7 @@ export const OnboardingWizardPage = () => {
       );
     }
 
-    // Confirmation for current step
+    // Confirmation
     if (isConfirmed && step.confirmation) {
       messages.push(
         <div key={`c-${currentStep}`} className="threadPage__message threadPage__message--assistant">
@@ -1329,27 +1326,102 @@ export const OnboardingWizardPage = () => {
     return messages;
   };
 
-  // Render interactive options (chips or multi-select) for the current step
+  // Render the staged import action (file picker or data source picker) shown
+  // inside the assistant bubble during the step 1 sub-flow.
+  const renderImportAction = () => {
+    if (importStage === 'upload') {
+      return (
+        <>
+          <OuiText size="s">
+            <p style={{ marginTop: 0 }}>
+              Choose a JSON or CSV file and I&rsquo;ll infer your schema from it.
+            </p>
+          </OuiText>
+          <OuiSpacer size="s" />
+          <div className="onboardWizard__multiActions">
+            <button
+              type="button"
+              className="onboardWizard__chip onboardWizard__chip--confirm"
+              onClick={handleImportFinalize}
+              disabled={isProcessing}>
+              Choose file
+            </button>
+            <button
+              type="button"
+              className="onboardWizard__skipLink"
+              onClick={handleImportBack}
+              disabled={isProcessing}>
+              Back
+            </button>
+          </div>
+        </>
+      );
+    }
+
+    if (importStage === 'connect') {
+      return (
+        <>
+          <OuiText size="s">
+            <p style={{ marginTop: 0 }}>Which data source would you like to connect?</p>
+          </OuiText>
+          <OuiSpacer size="s" />
+          <div className="onboardWizard__chips">
+            {CONNECT_SOURCES.map((src) => (
+              <button
+                key={src.key}
+                type="button"
+                className={`onboardWizard__chip${
+                  connectSource === src.key ? ' onboardWizard__chip--selected' : ''
+                }`}
+                onClick={() => handleConnectSourcePick(src.key)}
+                disabled={isProcessing}>
+                <span>{src.label}</span>
+                <span className="onboardWizard__chipDescription">{src.description}</span>
+              </button>
+            ))}
+          </div>
+          <OuiSpacer size="s" />
+          <div className="onboardWizard__multiActions">
+            <button
+              type="button"
+              className="onboardWizard__chip onboardWizard__chip--confirm"
+              onClick={handleImportFinalize}
+              disabled={isProcessing || !connectSource}>
+              Connect
+            </button>
+            <button
+              type="button"
+              className="onboardWizard__skipLink"
+              onClick={handleImportBack}
+              disabled={isProcessing}>
+              Back
+            </button>
+          </div>
+        </>
+      );
+    }
+
+    return null;
+  };
+
+  // Render interactive options
   const renderOptions = () => {
     if (isConfirmed) return null;
+    const options = getStepOptions(step);
 
     if (step.optionType === 'chips') {
       return (
         <>
           <div className="onboardWizard__chips">
-            {step.options.map((opt) => (
+            {options.map((opt) => (
               <button
                 key={opt.key}
                 type="button"
                 className={`onboardWizard__chip${
-                  currentSelection === opt.key
-                    ? ' onboardWizard__chip--selected'
-                    : ''
+                  currentSelection === opt.key ? ' onboardWizard__chip--selected' : ''
                 }${opt.primary ? ' onboardWizard__chip--confirm' : ''}${opt.empty ? ' onboardWizard__chip--empty' : ''}`}
                 onClick={() =>
-                  isLastStep
-                    ? handleFinalNavigation(opt.key)
-                    : handleChipSelect(opt.key)
+                  isLastStep ? handleFinalNavigation() : handleChipSelect(opt.key)
                 }
                 disabled={isConfirmed || isProcessing}>
                 <span>{opt.label}</span>
@@ -1374,28 +1446,80 @@ export const OnboardingWizardPage = () => {
       );
     }
 
-    if (step.optionType === 'multiselect') {
+    if (step.optionType === 'enrich') {
+      const config =
+        currentSelection && typeof currentSelection === 'object' && !Array.isArray(currentSelection)
+          ? currentSelection
+          : buildDefaultEnrichConfig(useCase);
+      const detected = getDetectedFields(useCase);
+      const enrichedCount = getEnrichedFieldNames(config).length;
+
       return (
-        <div className="onboardWizard__multiSelect">
-          {step.options.map((opt) => {
-            const checked =
-              Array.isArray(currentSelection) &&
-              currentSelection.includes(opt.key);
+        <div className="onboardWizard__enrichList">
+          {detected.map((field) => {
+            const cfg = config[field.name] || {
+              enrich: false,
+              language: 'en',
+              modelType: 'dense',
+              customModel: '',
+            };
+            const suggested = isSuggestedField(field);
             return (
-              <div key={opt.key} className="onboardWizard__multiOption">
-                <OuiCheckbox
-                  id={`transform-${opt.key}`}
-                  label={opt.label}
-                  checked={checked}
-                  onChange={() => handleMultiSelectToggle(opt.key)}
-                  disabled={isConfirmed || isProcessing}
-                />
-                <OuiText
-                  size="xs"
-                  color="subdued"
-                  className="onboardWizard__multiDesc">
-                  {opt.description}
-                </OuiText>
+              <div
+                key={field.name}
+                className={`onboardWizard__enrichRow${cfg.enrich ? ' onboardWizard__enrichRow--on' : ''}`}>
+                <div className="onboardWizard__enrichHead">
+                  <OuiCheckbox
+                    id={`enrich-${field.name}`}
+                    label={field.name}
+                    checked={!!cfg.enrich}
+                    onChange={(e) =>
+                      handleEnrichFieldChange(field.name, { enrich: e.target.checked })
+                    }
+                    disabled={isConfirmed || isProcessing}
+                  />
+                  <span className="onboardWizard__enrichType">{field.type}</span>
+                  {suggested && (
+                    <OuiBadge color="hollow" iconType="starFilled">
+                      Suggested
+                    </OuiBadge>
+                  )}
+                </div>
+                {cfg.enrich && (
+                  <div className="onboardWizard__enrichControls">
+                    <OuiCompressedSelect
+                      prepend="Language"
+                      options={LANGUAGE_OPTIONS}
+                      value={cfg.language}
+                      onChange={(e) =>
+                        handleEnrichFieldChange(field.name, { language: e.target.value })
+                      }
+                      disabled={isConfirmed || isProcessing}
+                      aria-label={`Language for ${field.name}`}
+                    />
+                    <OuiCompressedSelect
+                      prepend="Model"
+                      options={MODEL_TYPE_OPTIONS}
+                      value={cfg.modelType}
+                      onChange={(e) =>
+                        handleEnrichFieldChange(field.name, { modelType: e.target.value })
+                      }
+                      disabled={isConfirmed || isProcessing}
+                      aria-label={`Model type for ${field.name}`}
+                    />
+                    {cfg.modelType === 'custom' && (
+                      <OuiCompressedFieldText
+                        placeholder="Custom model ID (e.g. my-org/my-model)"
+                        value={cfg.customModel}
+                        onChange={(e) =>
+                          handleEnrichFieldChange(field.name, { customModel: e.target.value })
+                        }
+                        disabled={isConfirmed || isProcessing}
+                        aria-label={`Custom model id for ${field.name}`}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1404,14 +1528,11 @@ export const OnboardingWizardPage = () => {
               <button
                 type="button"
                 className="onboardWizard__chip onboardWizard__chip--confirm"
-                onClick={handleMultiSelectConfirm}
-                disabled={
-                  isProcessing ||
-                  !currentSelection ||
-                  (Array.isArray(currentSelection) &&
-                    currentSelection.length === 0)
-                }>
-                Apply transformations
+                onClick={handleEnrichConfirm}
+                disabled={isProcessing || enrichedCount === 0}>
+                {enrichedCount > 0
+                  ? `Enable semantic search (${enrichedCount})`
+                  : 'Enable semantic search'}
               </button>
               <button
                 type="button"
@@ -1439,7 +1560,6 @@ export const OnboardingWizardPage = () => {
         right: 0,
         bottom: 0,
       }}>
-      {/* Left nav — matches Day N session experience */}
       <SessionLeftNav
         isEmptySession={true}
         activeView="session"
@@ -1450,7 +1570,6 @@ export const OnboardingWizardPage = () => {
         onSelectSession={() => {}}
       />
 
-      {/* Content area with chrome panel */}
       <div
         style={{
           flex: 1,
@@ -1461,12 +1580,12 @@ export const OnboardingWizardPage = () => {
           className="samplePagesContentPanel"
           style={{ flex: 1, minWidth: 0, position: 'relative' }}>
           <div className="onboardWizard">
-            {/* Left Panel — Thread-style chat interaction */}
+            {/* Left Panel */}
             <div className="onboardWizard__left">
               <div className="onboardWizard__leftPanel">
                 <div className="threadPage__body">
                   <div className="threadPage__conversationCol">
-                    {/* Step indicator header */}
+                    {/* Step indicator */}
                     <div className="onboardWizard__stepIndicator" style={{ padding: '12px 16px 0' }}>
                       <OuiTitle size="xxxs">
                         <h6>Step {step.mainStep} of {totalMainSteps}</h6>
@@ -1475,43 +1594,42 @@ export const OnboardingWizardPage = () => {
                         <h3>{step.title}</h3>
                       </OuiTitle>
                       <div className="onboardWizard__timeline" style={{ marginTop: 8 }}>
-                          {Array.from({ length: totalMainSteps }, (_, mainIdx) => {
-                            const mainNum = mainIdx + 1;
-                            const isMainDone = step.mainStep > mainNum;
-                            const isMainCurrent = step.mainStep === mainNum;
-                            // Find the first sub-step index for this main step (for navigation)
-                            const firstSubIdx = STEPS.findIndex((s) => s.mainStep === mainNum);
-                            if (isMainDone) {
-                              return (
-                                <button
-                                  key={mainIdx}
-                                  type="button"
-                                  className="onboardWizard__timelineDot onboardWizard__timelineDot--done"
-                                  onClick={() => handleStepClick(firstSubIdx)}
-                                  aria-label={`Go back to step ${mainNum}: ${STEPS[firstSubIdx].title}`}
-                                  title={STEPS[firstSubIdx].title}
-                                />
-                              );
-                            }
-                            if (isMainCurrent) {
-                              return (
-                                <span
-                                  key={mainIdx}
-                                  className="onboardWizard__timelineDot onboardWizard__timelineDot--current"
-                                />
-                              );
-                            }
+                        {Array.from({ length: totalMainSteps }, (_, mainIdx) => {
+                          const mainNum = mainIdx + 1;
+                          const isMainDone = step.mainStep > mainNum;
+                          const isMainCurrent = step.mainStep === mainNum;
+                          const firstSubIdx = STEPS.findIndex((s) => s.mainStep === mainNum);
+                          if (isMainDone) {
+                            return (
+                              <button
+                                key={mainIdx}
+                                type="button"
+                                className="onboardWizard__timelineDot onboardWizard__timelineDot--done"
+                                onClick={() => handleStepClick(firstSubIdx)}
+                                aria-label={`Go back to step ${mainNum}: ${STEPS[firstSubIdx].title}`}
+                                title={STEPS[firstSubIdx].title}
+                              />
+                            );
+                          }
+                          if (isMainCurrent) {
                             return (
                               <span
                                 key={mainIdx}
-                                className="onboardWizard__timelineDot onboardWizard__timelineDot--inactive"
+                                className="onboardWizard__timelineDot onboardWizard__timelineDot--current"
                               />
                             );
-                          })}
-                        </div>
+                          }
+                          return (
+                            <span
+                              key={mainIdx}
+                              className="onboardWizard__timelineDot onboardWizard__timelineDot--inactive"
+                            />
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    {/* Conversation feed — reuses threadPage__feed pattern */}
+                    {/* Conversation feed */}
                     <div className="threadPage__feed" ref={feedRef}>
                       {buildConversation()}
                       <div ref={feedEndRef} />
@@ -1548,7 +1666,6 @@ export const OnboardingWizardPage = () => {
                         </div>
                       </div>
                     </div>
-
                   </div>
                 </div>
               </div>
@@ -1562,6 +1679,9 @@ export const OnboardingWizardPage = () => {
                   selectedOption={currentSelection}
                   confirmed={isConfirmed}
                   allSelections={selections}
+                  useCase={useCase}
+                  importStage={importStage}
+                  connectSource={connectSource}
                 />
               </div>
             </div>
@@ -1573,12 +1693,26 @@ export const OnboardingWizardPage = () => {
 };
 
 // Helper to get a label for a user's selection
-function getSelectionLabel(step, selection) {
+function getSelectionLabel(step, selection, useCase) {
+  // Step 2 enrichment stores a per-field config object.
+  if (step.dynamicOptions && selection && typeof selection === 'object' && !Array.isArray(selection)) {
+    const names = getEnrichedFieldNames(selection);
+    if (names.length === 0) return 'Skipped';
+    return names
+      .map((name) => {
+        const cfg = selection[name];
+        return `${name} (${cfg.language === 'multi' ? 'Multi' : 'EN'} · ${MODEL_TYPE_LABEL[cfg.modelType]})`;
+      })
+      .join(', ');
+  }
   if (Array.isArray(selection)) {
     if (selection.length === 0) return 'Skipped';
     return selection
       .map((key) => {
-        const opt = step.options.find((o) => o.key === key);
+        const options = step.dynamicOptions
+          ? getDetectedFields(useCase).map((f) => ({ key: f.name, label: f.name }))
+          : step.options;
+        const opt = options.find((o) => o.key === key);
         return opt ? opt.label : key;
       })
       .join(', ');
