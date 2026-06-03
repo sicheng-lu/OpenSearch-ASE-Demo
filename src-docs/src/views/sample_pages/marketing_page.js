@@ -201,7 +201,7 @@ const HeroSection = () => (
       </p>
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
         <button
-          onClick={() => { window.location.href = '/#/onboarding-wizard'; }}
+          onClick={() => { window.location.hash = '/onboarding-wizard'; }}
           style={{
             backgroundColor: '#1a1a2e',
             color: '#ffffff',
