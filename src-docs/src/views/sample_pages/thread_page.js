@@ -1407,6 +1407,13 @@ const SCRIPTED_RESPONSES = {
         'Phase 1 is applied and promoted to 100%. Relevancy for "wireless headphones" is recovering.\n\nPhase 2 (reindex with the correct analyzer) is still pending — the interim boost recovers about 84% of the loss, but full recovery needs the reindex.',
       attachments: [
         {
+          type: 'link-preview',
+          key: 'query-set-comparison-filled',
+          title: 'Query set comparison — before vs after fix',
+          description:
+            'Side-by-side ranking for "wireless headphones": baseline query vs the interim-boost query, with per-document rank changes and result overlap.',
+        },
+        {
           type: 'chart',
           chartType: 'line',
           title: 'nDCG@10 recovery',

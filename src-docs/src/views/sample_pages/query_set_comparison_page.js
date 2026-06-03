@@ -272,14 +272,21 @@ export const QuerySetComparisonPage = ({ initialMode = 'empty' }) => {
     return () => window.removeEventListener('resize', recomputeLines);
   }, [recomputeLines, submittedText, hasResults]);
 
-  // Run the comparison. In this mock, a search only produces results when the
-  // page is in the filled scenario; otherwise it stays in the empty state.
+  // Run the comparison. In this mock there's no real query execution, so a
+  // search loads the pre-baked "filled" scenario — turning the empty state
+  // into the populated side-by-side comparison.
   const handleSearch = () => {
-    setSubmittedText(searchText.trim());
-    if (filled) {
-      setResult1(RESULT_1);
-      setResult2(RESULT_2);
-    }
+    const text = searchText.trim() || 'laptop';
+    setSearchText(text);
+    setSubmittedText(text);
+    // Seed the query config if the user hasn't set it up themselves.
+    if (!index1) setIndex1('ecommerce');
+    if (!index2) setIndex2('ecommerce');
+    if (!pipeline2) setPipeline2('normalization-pipeline');
+    if (!query1) setQuery1(QUERY_1_DSL);
+    if (!query2) setQuery2(QUERY_2_DSL);
+    setResult1(RESULT_1);
+    setResult2(RESULT_2);
   };
 
   const renderResultList = (results, side, refMap) => (
@@ -435,3 +442,10 @@ export const QuerySetComparisonPage = ({ initialMode = 'empty' }) => {
     </div>
   );
 };
+
+// Convenience wrapper that mounts the comparison page already populated with
+// the mock "laptop" scenario (results, queries, overlap). Used when opening the
+// page from an attachment that should land directly in the filled state.
+export const QuerySetComparisonPageFilled = (props) => (
+  <QuerySetComparisonPage {...props} initialMode="filled" />
+);

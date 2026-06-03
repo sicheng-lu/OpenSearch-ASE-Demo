@@ -273,25 +273,22 @@ const MODEL_TYPE_LABEL = {
 
 const ENRICH_QUESTIONS = [
   {
-    key: 'content',
-    label: 'What kind of content does this index hold?',
+    key: 'useCase',
+    label: 'Tell me about your use case',
     options: [
-      { key: 'products', label: 'Products' },
-      { key: 'documents', label: 'Articles or documents' },
-      { key: 'reviews', label: 'Reviews or comments' },
-      { key: 'faq', label: 'FAQs or knowledge base' },
-      { key: 'logs', label: 'Logs or events' },
+      { key: 'chatbots', label: 'Chatbots' },
+      { key: 'enterprise', label: 'Enterprise search' },
+      { key: 'multilingual', label: 'Multilingual search' },
       { key: 'other', label: 'Other' },
     ],
   },
   {
     key: 'searchStyle',
-    label: 'How do users search, and what matters most?',
+    label: 'What matters most to you?',
     options: [
-      { key: 'relevance', label: 'Natural-language phrases — best relevance' },
-      { key: 'keywords', label: 'Keywords or names — balanced' },
-      { key: 'exact', label: 'Exact IDs or codes — fastest & cheapest' },
-      { key: 'mix', label: 'A mix of everything' },
+      { key: 'relevance', label: 'Best relevance' },
+      { key: 'keywords', label: 'Balanced' },
+      { key: 'exact', label: 'Fastest and cheapest' },
     ],
   },
 ];
@@ -1019,7 +1016,7 @@ export const OnboardingWizardPage = () => {
   // Step 2 enrichment view: false = show the suggestion summary, true = show the
   // per-field editor (fields / model / language).
   const [enrichEditing, setEnrichEditing] = useState(false);
-  // Step 2 questionnaire answers ({ content, searchStyle }) and whether the
+  // Step 2 questionnaire answers ({ useCase, searchStyle }) and whether the
   // suggestion has been generated from them yet.
   const [enrichAnswers, setEnrichAnswers] = useState({});
   const [enrichSuggested, setEnrichSuggested] = useState(false);
@@ -1080,7 +1077,7 @@ export const OnboardingWizardPage = () => {
   }, [currentStep, step.question]);
 
   // Step 2 config is no longer auto-seeded on entry — it's generated from the
-  // questionnaire answers when the user clicks "Get suggestions".
+  // questionnaire answers automatically once both questions are answered.
 
   // Fade in the right panel when step changes
   useEffect(() => {
@@ -1096,7 +1093,7 @@ export const OnboardingWizardPage = () => {
         feedEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }
     });
-  }, [currentStep, isConfirmed, isProcessing, streamedText]);
+  }, [currentStep, isConfirmed, isProcessing, streamedText, enrichAnswers, enrichSuggested]);
 
   // Generic confirm+advance used by most steps.
   const confirmCurrentStep = useCallback(
@@ -1179,14 +1176,27 @@ export const OnboardingWizardPage = () => {
   );
 
   // Generate the suggestion from the answers and reveal the suggestion summary.
-  const handleGetSuggestions = useCallback(() => {
-    if (isProcessing) return;
+  // This runs automatically once both questions are answered (see the effect
+  // below) so the flow stays conversational — no "Get suggestions" button.
+  const revealSuggestion = useCallback(() => {
     setSelections((prev) => ({
       ...prev,
       [currentStep]: buildDefaultEnrichConfig(useCase, enrichAnswers),
     }));
     setEnrichSuggested(true);
-  }, [isProcessing, currentStep, useCase, enrichAnswers]);
+  }, [currentStep, useCase, enrichAnswers]);
+
+  // Auto-reveal the suggestion shortly after both questions are answered, so
+  // each message appears one after another like the rest of the conversation.
+  useEffect(() => {
+    if (step.optionType !== 'enrich' || enrichSuggested || isConfirmed || isProcessing) {
+      return;
+    }
+    const answered = ENRICH_QUESTIONS.every((q) => enrichAnswers[q.key]);
+    if (!answered) return;
+    const timer = setTimeout(revealSuggestion, 600);
+    return () => clearTimeout(timer);
+  }, [step.optionType, enrichAnswers, enrichSuggested, isConfirmed, isProcessing, revealSuggestion]);
 
   // Update a single field's enrichment config (enrich flag, language, model).
   const handleEnrichFieldChange = useCallback(
@@ -1395,6 +1405,65 @@ export const OnboardingWizardPage = () => {
       }
     }
 
+    // Enrichment questionnaire sub-flow (step 2): the intro bubble above hosts
+    // Q1. Once Q1 is answered we echo the answer and reveal Q2 as a new
+    // assistant message; once Q2 is answered we echo it and the suggestion
+    // auto-reveals as a third message — each appearing one after another.
+    if (step.optionType === 'enrich' && !isConfirmed) {
+      const q1 = ENRICH_QUESTIONS[0];
+      const q2 = ENRICH_QUESTIONS[1];
+      const q1Answer = enrichAnswers[q1.key];
+      const q2Answer = enrichAnswers[q2.key];
+      const labelFor = (q, key) => {
+        const opt = q.options.find((o) => o.key === key);
+        return opt ? opt.label : '';
+      };
+
+      if (q1Answer) {
+        // Echo the Q1 answer as a user turn.
+        messages.push(
+          <div key={`enrich-a1-${currentStep}`} className="threadPage__message threadPage__message--user">
+            <div className="threadPage__bubble threadPage__bubble--user">
+              <OuiText size="s">
+                <p>{labelFor(q1, q1Answer)}</p>
+              </OuiText>
+            </div>
+          </div>
+        );
+        // Reveal Q2 as its own assistant message.
+        messages.push(
+          <div key={`enrich-q2-${currentStep}`} className="threadPage__message threadPage__message--assistant">
+            <div className="threadPage__bubble threadPage__bubble--assistant">
+              {renderEnrichChips(q2)}
+            </div>
+          </div>
+        );
+      }
+
+      if (q1Answer && q2Answer) {
+        // Echo the Q2 answer as a user turn.
+        messages.push(
+          <div key={`enrich-a2-${currentStep}`} className="threadPage__message threadPage__message--user">
+            <div className="threadPage__bubble threadPage__bubble--user">
+              <OuiText size="s">
+                <p>{labelFor(q2, q2Answer)}</p>
+              </OuiText>
+            </div>
+          </div>
+        );
+        // The suggestion message appears once it has been generated.
+        if (enrichSuggested && !enrichEditing) {
+          messages.push(
+            <div key={`enrich-suggest-${currentStep}`} className="threadPage__message threadPage__message--assistant">
+              <div className="threadPage__bubble threadPage__bubble--assistant">
+                {renderEnrichSuggestionBody()}
+              </div>
+            </div>
+          );
+        }
+      }
+    }
+
     // Enrichment "Edit" sub-flow (step 2): clicking Edit on the suggestion adds
     // a new user turn + an assistant turn containing the full editor.
     if (step.optionType === 'enrich' && enrichEditing && !isConfirmed) {
@@ -1549,6 +1618,94 @@ export const OnboardingWizardPage = () => {
     return null;
   };
 
+  // Render the chips for a single step-2 questionnaire question. Used to place
+  // each question in its own conversation message so they surface one by one.
+  const renderEnrichChips = (q) => (
+    <div className="onboardWizard__enrichQuestion">
+      <OuiText size="s">
+        <strong>{q.label}</strong>
+      </OuiText>
+      <OuiSpacer size="xs" />
+      <div className="onboardWizard__chips">
+        {q.options.map((opt) => (
+          <button
+            key={opt.key}
+            type="button"
+            className={`onboardWizard__chip${
+              enrichAnswers[q.key] === opt.key ? ' onboardWizard__chip--selected' : ''
+            }`}
+            onClick={() => handleEnrichAnswer(q.key, opt.key)}
+            disabled={isConfirmed || isProcessing || enrichSuggested}>
+            <span>{opt.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  // The suggestion summary (reason + per-field models + actions), shown as its
+  // own assistant message once both questions are answered.
+  const renderEnrichSuggestionBody = () => {
+    const config =
+      currentSelection && typeof currentSelection === 'object' && !Array.isArray(currentSelection)
+        ? currentSelection
+        : buildDefaultEnrichConfig(useCase, enrichAnswers);
+    const enrichedNames = getEnrichedFieldNames(config);
+    const enrichedCount = enrichedNames.length;
+
+    return (
+      <div className="onboardWizard__enrichSuggestion">
+        <OuiText size="s">
+          <p style={{ margin: 0 }}>{getSuggestionReason(useCase, enrichAnswers)}</p>
+        </OuiText>
+        {enrichedCount > 0 && (
+          <div className="onboardWizard__enrichSuggestList">
+            {enrichedNames.map((name) => {
+              const cfg = config[name];
+              return (
+                <div key={name} className="onboardWizard__enrichSuggestRow">
+                  <OuiText size="s"><strong>{name}</strong></OuiText>
+                  <div className="onboardWizard__enrichSuggestTags">
+                    <span className="onboardWizard__enrichType">
+                      {MODEL_TYPE_LABEL[cfg.modelType]}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {!isConfirmed && !enrichEditing && (
+          <div className="onboardWizard__multiActions">
+            <button
+              type="button"
+              className="onboardWizard__chip onboardWizard__chip--confirm"
+              onClick={handleEnrichConfirm}
+              disabled={isProcessing || enrichedCount === 0}>
+              {enrichedCount > 0
+                ? `Confirm suggestion (${enrichedCount})`
+                : 'Confirm'}
+            </button>
+            <button
+              type="button"
+              className="onboardWizard__chip"
+              onClick={handleEnrichEdit}
+              disabled={isProcessing}>
+              Edit
+            </button>
+            <button
+              type="button"
+              className="onboardWizard__skipLink"
+              onClick={handleSkip}
+              disabled={isProcessing}>
+              {step.skipLabel}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Render interactive options
   const renderOptions = () => {
     if (isConfirmed) return null;
@@ -1592,117 +1749,15 @@ export const OnboardingWizardPage = () => {
     }
 
     if (step.optionType === 'enrich') {
-      // Questionnaire-first: until the user answers and gets suggestions, show
-      // the two consolidated questions.
-      if (!enrichSuggested) {
-        const allAnswered = ENRICH_QUESTIONS.every((q) => enrichAnswers[q.key]);
-        return (
-          <div className="onboardWizard__enrichQuestions">
-            {ENRICH_QUESTIONS.map((q) => (
-              <div key={q.key} className="onboardWizard__enrichQuestion">
-                <OuiText size="s">
-                  <strong>{q.label}</strong>
-                </OuiText>
-                <OuiSpacer size="xs" />
-                <div className="onboardWizard__chips">
-                  {q.options.map((opt) => (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      className={`onboardWizard__chip${
-                        enrichAnswers[q.key] === opt.key ? ' onboardWizard__chip--selected' : ''
-                      }`}
-                      onClick={() => handleEnrichAnswer(q.key, opt.key)}
-                      disabled={isConfirmed || isProcessing}>
-                      <span>{opt.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-            {!isConfirmed && (
-              <div className="onboardWizard__multiActions">
-                <button
-                  type="button"
-                  className="onboardWizard__chip onboardWizard__chip--confirm"
-                  onClick={handleGetSuggestions}
-                  disabled={isProcessing || !allAnswered}>
-                  Get suggestions
-                </button>
-                <button
-                  type="button"
-                  className="onboardWizard__skipLink"
-                  onClick={handleSkip}
-                  disabled={isProcessing}>
-                  {step.skipLabel}
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      }
-
-      const config =
-        currentSelection && typeof currentSelection === 'object' && !Array.isArray(currentSelection)
-          ? currentSelection
-          : buildDefaultEnrichConfig(useCase, enrichAnswers);
-      const enrichedNames = getEnrichedFieldNames(config);
-      const enrichedCount = enrichedNames.length;
-
-      // Suggestion summary — shown after "Get suggestions". "Edit" opens
-      // the full editor as a new turn (see buildConversation), not inline.
+      // Conversational questionnaire: this intro bubble hosts the FIRST
+      // question only. The second question and the suggestion surface as their
+      // own messages (see buildConversation), appearing one after another —
+      // no "Get suggestions" button; the suggestion auto-reveals once both
+      // questions are answered.
       return (
-        <div className="onboardWizard__enrichSuggestion">
-          <div className="onboardWizard__enrichReason">
-            <OuiText size="s">
-              <p style={{ margin: 0 }}>{getSuggestionReason(useCase, enrichAnswers)}</p>
-            </OuiText>
-          </div>
-          {enrichedCount > 0 && (
-            <div className="onboardWizard__enrichSuggestList">
-              {enrichedNames.map((name) => {
-                const cfg = config[name];
-                return (
-                  <div key={name} className="onboardWizard__enrichSuggestRow">
-                    <OuiText size="s"><strong>{name}</strong></OuiText>
-                    <div className="onboardWizard__enrichSuggestTags">
-                      <span className="onboardWizard__enrichType">
-                        {MODEL_TYPE_LABEL[cfg.modelType]}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {!isConfirmed && !enrichEditing && (
-            <div className="onboardWizard__multiActions">
-              <button
-                type="button"
-                className="onboardWizard__chip onboardWizard__chip--confirm"
-                onClick={handleEnrichConfirm}
-                disabled={isProcessing || enrichedCount === 0}>
-                {enrichedCount > 0
-                  ? `Confirm suggestion (${enrichedCount})`
-                  : 'Confirm'}
-              </button>
-              <button
-                type="button"
-                className="onboardWizard__chip"
-                onClick={handleEnrichEdit}
-                disabled={isProcessing}>
-                Edit
-              </button>
-              <button
-                type="button"
-                className="onboardWizard__skipLink"
-                onClick={handleSkip}
-                disabled={isProcessing}>
-                {step.skipLabel}
-              </button>
-            </div>
-          )}
-        </div>
+        <>
+          {renderEnrichChips(ENRICH_QUESTIONS[0])}
+        </>
       );
     }
 

@@ -28,7 +28,7 @@ import {
 import { ServicePage } from './service_page';
 import { ServiceDetailPage } from './service_detail_page';
 import { AlertRulePage } from './alert_rule_page';
-import { QuerySetComparisonPage } from './query_set_comparison_page';
+import { QuerySetComparisonPage, QuerySetComparisonPageFilled } from './query_set_comparison_page';
 
 /**
  * @typedef {Object} Session
@@ -123,6 +123,7 @@ export const SOURCE_PAGE_MOCK = {
   forecasting: { component: AppServicesPageMock, title: 'Forecasting' },
   'agent-spans': { component: AppServicesPageMock, title: 'Agent Spans' },
   'query-set-comparison': { component: QuerySetComparisonPage, title: 'Query Set Comparison' },
+  'query-set-comparison-filled': { component: QuerySetComparisonPageFilled, title: 'Query Set Comparison' },
   'relevancy-alert': { component: RelevancyAlertPageMock, title: 'Alert: nDCG@10 dropped 18%' },
 };
 
