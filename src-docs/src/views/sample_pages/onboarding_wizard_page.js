@@ -106,7 +106,7 @@ const STEPS = [
     mainStep: 2,
     subStep: 1,
     question:
-      'Want to add semantic search? Based on your data, here\u2019s what I suggest enriching. You can confirm, edit the details, or skip.',
+      'Want to add semantic search? Tell me about your use case and I\u2019ll recommend what to enrich. You can edit or skip anytime.',
     optionType: 'enrich',
     options: [], // dynamically populated based on inferred fields
     dynamicOptions: true,
@@ -246,11 +246,6 @@ const getDetectedFields = (useCase) => {
 // STEP 2 ENRICHMENT — per-field config options
 // ─────────────────────────────────────────────
 
-const LANGUAGE_OPTIONS = [
-  { value: 'en', text: 'English' },
-  { value: 'multi', text: 'Multi-language' },
-];
-
 const MODEL_TYPE_OPTIONS = [
   { value: 'dense', text: 'Dense model' },
   { value: 'sparse', text: 'Sparse model' },
@@ -270,18 +265,89 @@ const MODEL_TYPE_LABEL = {
   custom: 'Custom fine-tuned',
 };
 
+// ─────────────────────────────────────────────
+// STEP 2 QUESTIONNAIRE — two consolidated questions whose answers drive the
+// enrichment suggestion. Language is intentionally omitted (the data carries
+// it). Each question is single-select.
+// ─────────────────────────────────────────────
+
+const ENRICH_QUESTIONS = [
+  {
+    key: 'content',
+    label: 'What kind of content does this index hold?',
+    options: [
+      { key: 'products', label: 'Products' },
+      { key: 'documents', label: 'Articles or documents' },
+      { key: 'reviews', label: 'Reviews or comments' },
+      { key: 'faq', label: 'FAQs or knowledge base' },
+      { key: 'logs', label: 'Logs or events' },
+      { key: 'other', label: 'Other' },
+    ],
+  },
+  {
+    key: 'searchStyle',
+    label: 'How do users search, and what matters most?',
+    options: [
+      { key: 'relevance', label: 'Natural-language phrases — best relevance' },
+      { key: 'keywords', label: 'Keywords or names — balanced' },
+      { key: 'exact', label: 'Exact IDs or codes — fastest & cheapest' },
+      { key: 'mix', label: 'A mix of everything' },
+    ],
+  },
+];
+
+// Map the consolidated "search style" answer to a recommended model type.
+//   relevance -> dense · keywords -> sparse · exact -> keyword-only · mix -> hybrid
+const modelTypeForSearchStyle = (style) => {
+  switch (style) {
+    case 'keywords':
+      return 'sparse';
+    case 'exact':
+      return 'none'; // suggest keyword-only (no enrichment)
+    case 'mix':
+      return 'hybrid'; // dense on long text, sparse on short text
+    case 'relevance':
+    default:
+      return 'dense';
+  }
+};
+
+// Heuristic: "long text" fields (description/content/body/answer/etc.) get dense
+// in a hybrid setup; shorter text fields (title/name/question) get sparse.
+const isLongTextField = (name) =>
+  /desc|content|body|answer|summary|review|comment|text|abstract/i.test(name);
+
+
 // We suggest enriching text fields by default; other types start unchecked but
 // remain fully editable.
 const isSuggestedField = (field) => field.type === 'text';
 
-// Build the default per-field enrichment config from the detected schema.
-const buildDefaultEnrichConfig = (useCase) => {
+// Build the per-field enrichment config from the detected schema, shaped by the
+// questionnaire answers. Falls back to a sensible default (dense on text
+// fields) when no answers are provided yet.
+const buildDefaultEnrichConfig = (useCase, answers) => {
+  const style = answers && answers.searchStyle;
+  const recommended = style ? modelTypeForSearchStyle(style) : 'dense';
   const config = {};
   getDetectedFields(useCase).forEach((f) => {
+    const isText = f.type === 'text';
+    let modelType = 'dense';
+    let enrich = isText;
+
+    if (recommended === 'none') {
+      enrich = false; // exact/ID search → keyword only
+    } else if (recommended === 'hybrid') {
+      modelType = isLongTextField(f.name) ? 'dense' : 'sparse';
+    } else if (recommended === 'sparse') {
+      modelType = 'sparse';
+    } else {
+      modelType = 'dense';
+    }
+
     config[f.name] = {
-      enrich: isSuggestedField(f),
+      enrich,
       language: 'en',
-      modelType: 'dense',
+      modelType,
       customModel: '',
     };
   });
@@ -294,14 +360,27 @@ const getEnrichedFieldNames = (config) =>
     ? Object.keys(config).filter((name) => config[name] && config[name].enrich)
     : [];
 
-// Short rationale for the suggested enrichment, shown in the summary view.
-const getSuggestionReason = (useCase) => {
+// Short rationale for the suggested enrichment, shaped by the answers.
+const getSuggestionReason = (useCase, answers) => {
   const suggested = getDetectedFields(useCase).filter(isSuggestedField);
   if (suggested.length === 0) {
     return 'No text fields were detected, so semantic enrichment isn\u2019t recommended for this data.';
   }
   const names = suggested.map((f) => f.name).join(', ');
-  return `Your text fields (${names}) carry the natural-language meaning users search for, so I suggest enriching them with a dense model in English. Keyword, date, and numeric fields are better left for exact filtering.`;
+  const style = answers && answers.searchStyle;
+  const recommended = style ? modelTypeForSearchStyle(style) : 'dense';
+
+  switch (recommended) {
+    case 'none':
+      return `You told me search is mostly exact IDs or codes, so keyword search is the better fit — I\u2019d skip semantic enrichment. You can still enable it per field if you want.`;
+    case 'sparse':
+      return `Based on your answers (keyword-style search, balanced cost), I suggest a sparse model on your text fields (${names}) \u2014 strong keyword recall without the cost of dense vectors.`;
+    case 'hybrid':
+      return `Based on your answers (a mix of search styles), I suggest a hybrid setup: a dense model on longer text and a sparse model on shorter fields across ${names}.`;
+    case 'dense':
+    default:
+      return `Based on your answers (natural-language search, relevance-first), I suggest a dense model on your text fields (${names}) so queries match on meaning, not just keywords.`;
+  }
 };
 
 // Resolve the model name for a field's config.
@@ -597,7 +676,6 @@ const SemanticConfigPanel = ({ enrichConfig, useCase }) => {
                 <div key={name} className="onboardWizard__summaryRow" style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <OuiText size="xs"><strong>{name}</strong></OuiText>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span className="onboardWizard__envBadge">{cfg.language === 'multi' ? 'Multi-language' : 'English'}</span>
                     <span className="onboardWizard__envBadge">{MODEL_TYPE_LABEL[cfg.modelType]}</span>
                   </div>
                 </div>
@@ -941,6 +1019,10 @@ export const OnboardingWizardPage = () => {
   // Step 2 enrichment view: false = show the suggestion summary, true = show the
   // per-field editor (fields / model / language).
   const [enrichEditing, setEnrichEditing] = useState(false);
+  // Step 2 questionnaire answers ({ content, searchStyle }) and whether the
+  // suggestion has been generated from them yet.
+  const [enrichAnswers, setEnrichAnswers] = useState({});
+  const [enrichSuggested, setEnrichSuggested] = useState(false);
   const feedRef = useRef(null);
   const feedEndRef = useRef(null);
   const streamTimers = useRef([]);
@@ -974,10 +1056,7 @@ export const OnboardingWizardPage = () => {
 
     // For the enrichment step, the suggestion rationale is part of the
     // assistant's response (a second paragraph), not a side box.
-    const fullText =
-      step.optionType === 'enrich'
-        ? `${step.question}\n\n${getSuggestionReason(useCase)}`
-        : step.question;
+    const fullText = step.question;
     const tokens = fullText.split(/(\s+)/);
     setStreamedText('');
     setIsStreaming(true);
@@ -1000,18 +1079,8 @@ export const OnboardingWizardPage = () => {
     };
   }, [currentStep, step.question]);
 
-  // Seed the step 2 enrichment config with suggestions when the step is shown,
-  // so the right panel reflects the suggested fields right away.
-  useEffect(() => {
-    if (
-      step.optionType === 'enrich' &&
-      !isConfirmed &&
-      !(selections[currentStep] && typeof selections[currentStep] === 'object')
-    ) {
-      setSelections((prev) => ({ ...prev, [currentStep]: buildDefaultEnrichConfig(useCase) }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep, step.optionType, useCase]);
+  // Step 2 config is no longer auto-seeded on entry — it's generated from the
+  // questionnaire answers when the user clicks "Get suggestions".
 
   // Fade in the right panel when step changes
   useEffect(() => {
@@ -1088,17 +1157,36 @@ export const OnboardingWizardPage = () => {
     });
   }, [isProcessing, currentStep]);
 
-  // Ensure the step 2 enrichment config exists (lazily seeded with our
-  // suggestions) and return it.
+  // Ensure the step 2 enrichment config exists (seeded from the questionnaire
+  // answers) and return it.
   const ensureEnrichConfig = useCallback(() => {
     const existing = selections[currentStep];
     if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
       return existing;
     }
-    const seeded = buildDefaultEnrichConfig(useCase);
+    const seeded = buildDefaultEnrichConfig(useCase, enrichAnswers);
     setSelections((prev) => ({ ...prev, [currentStep]: seeded }));
     return seeded;
-  }, [selections, currentStep, useCase]);
+  }, [selections, currentStep, useCase, enrichAnswers]);
+
+  // Answer one of the step 2 questionnaire questions (single-select).
+  const handleEnrichAnswer = useCallback(
+    (questionKey, optionKey) => {
+      if (isConfirmed || isProcessing || enrichSuggested) return;
+      setEnrichAnswers((prev) => ({ ...prev, [questionKey]: optionKey }));
+    },
+    [isConfirmed, isProcessing, enrichSuggested]
+  );
+
+  // Generate the suggestion from the answers and reveal the suggestion summary.
+  const handleGetSuggestions = useCallback(() => {
+    if (isProcessing) return;
+    setSelections((prev) => ({
+      ...prev,
+      [currentStep]: buildDefaultEnrichConfig(useCase, enrichAnswers),
+    }));
+    setEnrichSuggested(true);
+  }, [isProcessing, currentStep, useCase, enrichAnswers]);
 
   // Update a single field's enrichment config (enrich flag, language, model).
   const handleEnrichFieldChange = useCallback(
@@ -1152,6 +1240,8 @@ export const OnboardingWizardPage = () => {
         setImportStage(null);
         setConnectSource(null);
         setEnrichEditing(false);
+        setEnrichAnswers({});
+        setEnrichSuggested(false);
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -1173,6 +1263,8 @@ export const OnboardingWizardPage = () => {
         setImportStage(null);
         setConnectSource(null);
         setEnrichEditing(false);
+        setEnrichAnswers({});
+        setEnrichSuggested(false);
       }
     },
     [currentStep, confirmedSteps, selections, totalSteps]
@@ -1500,17 +1592,72 @@ export const OnboardingWizardPage = () => {
     }
 
     if (step.optionType === 'enrich') {
+      // Questionnaire-first: until the user answers and gets suggestions, show
+      // the two consolidated questions.
+      if (!enrichSuggested) {
+        const allAnswered = ENRICH_QUESTIONS.every((q) => enrichAnswers[q.key]);
+        return (
+          <div className="onboardWizard__enrichQuestions">
+            {ENRICH_QUESTIONS.map((q) => (
+              <div key={q.key} className="onboardWizard__enrichQuestion">
+                <OuiText size="s">
+                  <strong>{q.label}</strong>
+                </OuiText>
+                <OuiSpacer size="xs" />
+                <div className="onboardWizard__chips">
+                  {q.options.map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      className={`onboardWizard__chip${
+                        enrichAnswers[q.key] === opt.key ? ' onboardWizard__chip--selected' : ''
+                      }`}
+                      onClick={() => handleEnrichAnswer(q.key, opt.key)}
+                      disabled={isConfirmed || isProcessing}>
+                      <span>{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {!isConfirmed && (
+              <div className="onboardWizard__multiActions">
+                <button
+                  type="button"
+                  className="onboardWizard__chip onboardWizard__chip--confirm"
+                  onClick={handleGetSuggestions}
+                  disabled={isProcessing || !allAnswered}>
+                  Get suggestions
+                </button>
+                <button
+                  type="button"
+                  className="onboardWizard__skipLink"
+                  onClick={handleSkip}
+                  disabled={isProcessing}>
+                  {step.skipLabel}
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      }
+
       const config =
         currentSelection && typeof currentSelection === 'object' && !Array.isArray(currentSelection)
           ? currentSelection
-          : buildDefaultEnrichConfig(useCase);
+          : buildDefaultEnrichConfig(useCase, enrichAnswers);
       const enrichedNames = getEnrichedFieldNames(config);
       const enrichedCount = enrichedNames.length;
 
-      // Suggestion summary — always shown in the question bubble. "Edit" opens
+      // Suggestion summary — shown after "Get suggestions". "Edit" opens
       // the full editor as a new turn (see buildConversation), not inline.
       return (
         <div className="onboardWizard__enrichSuggestion">
+          <div className="onboardWizard__enrichReason">
+            <OuiText size="s">
+              <p style={{ margin: 0 }}>{getSuggestionReason(useCase, enrichAnswers)}</p>
+            </OuiText>
+          </div>
           {enrichedCount > 0 && (
             <div className="onboardWizard__enrichSuggestList">
               {enrichedNames.map((name) => {
@@ -1519,9 +1666,6 @@ export const OnboardingWizardPage = () => {
                   <div key={name} className="onboardWizard__enrichSuggestRow">
                     <OuiText size="s"><strong>{name}</strong></OuiText>
                     <div className="onboardWizard__enrichSuggestTags">
-                      <span className="onboardWizard__enrichType">
-                        {cfg.language === 'multi' ? 'Multi-language' : 'English'}
-                      </span>
                       <span className="onboardWizard__enrichType">
                         {MODEL_TYPE_LABEL[cfg.modelType]}
                       </span>
@@ -1606,16 +1750,6 @@ export const OnboardingWizardPage = () => {
               </div>
               {cfg.enrich && (
                 <div className="onboardWizard__enrichControls">
-                  <OuiCompressedSelect
-                    prepend="Language"
-                    options={LANGUAGE_OPTIONS}
-                    value={cfg.language}
-                    onChange={(e) =>
-                      handleEnrichFieldChange(field.name, { language: e.target.value })
-                    }
-                    disabled={isConfirmed || isProcessing}
-                    aria-label={`Language for ${field.name}`}
-                  />
                   <OuiCompressedSelect
                     prepend="Model"
                     options={MODEL_TYPE_OPTIONS}
@@ -1817,7 +1951,7 @@ function getSelectionLabel(step, selection, useCase) {
     return names
       .map((name) => {
         const cfg = selection[name];
-        return `${name} (${cfg.language === 'multi' ? 'Multi' : 'EN'} · ${MODEL_TYPE_LABEL[cfg.modelType]})`;
+        return `${name} (${MODEL_TYPE_LABEL[cfg.modelType]})`;
       })
       .join(', ');
   }

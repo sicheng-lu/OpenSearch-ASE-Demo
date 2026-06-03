@@ -23,6 +23,7 @@ import {
   InventoryAnalysisPageMock,
   ConnectionPoolPageMock,
   TraceAnalysisPageMock,
+  RelevancyAlertPageMock,
 } from './mock_canvas_pages';
 import { ServicePage } from './service_page';
 import { ServiceDetailPage } from './service_detail_page';
@@ -122,6 +123,7 @@ export const SOURCE_PAGE_MOCK = {
   forecasting: { component: AppServicesPageMock, title: 'Forecasting' },
   'agent-spans': { component: AppServicesPageMock, title: 'Agent Spans' },
   'query-set-comparison': { component: QuerySetComparisonPage, title: 'Query Set Comparison' },
+  'relevancy-alert': { component: RelevancyAlertPageMock, title: 'Alert: nDCG@10 dropped 18%' },
 };
 
 /**

@@ -51,6 +51,7 @@ import {
   LogsPageMock,
   DashboardPageMock,
   TraceAnalysisPageMock,
+  RelevancyAlertPageMock,
 } from './mock_canvas_pages';
 
 // Map source page keys to existing canvas mock components
@@ -58,6 +59,7 @@ const SOURCE_PAGE_MOCK = {
   logs: { component: LogsPageMock, title: 'Logs' },
   alerts: { component: AlertPageMock, title: 'Alerts' },
   'alerts-detail': { component: AlertPageMock, title: 'Alerts Detail' },
+  'relevancy-alert': { component: RelevancyAlertPageMock, title: 'Alert: nDCG@10 dropped 18%' },
   dashboards: { component: DashboardPageMock, title: 'Dashboards' },
   notebooks: { component: InventoryAnalysisPageMock, title: 'Notebooks' },
   metrics: { component: ConnectionPoolPageMock, title: 'Metrics' },
@@ -66,33 +68,46 @@ const SOURCE_PAGE_MOCK = {
 
 const THREADS = {
   'latency-spike': {
-    title: 'Latency spike investigation',
+    title: 'Relevancy degradation — wireless headphones',
     messages: [
       {
         role: 'assistant',
         content:
-          'An alert has been triggered: P99 latency on the payment service exceeded 2,000ms for the past 15 minutes. I am starting an investigation.\n\nI pulled the service metrics and correlated them with recent deployment events. Here is what I am seeing:',
+          "I've detected a relevancy degradation that needs your attention. nDCG@10 for \"wireless headphones\" dropped 18% versus the 7-day baseline. I've already investigated — I have a root cause and a fix ready.",
         attachments: [
           {
             type: 'link-preview',
-            title: 'Payment service alert — P99 latency breach',
+            key: 'relevancy-alert',
+            title: 'Alert: nDCG@10 dropped 18% — wireless headphones',
             description:
-              'Triggered at 14:32 UTC. P99 latency crossed the 2,000ms threshold on 3 of 4 pods. No recent deploys in the last 6 hours.',
+              'Segment: audio/headphones/wireless (142 query variants) · ~3,200 searches/hr affected · Duration: 2h 19m · Status: investigation complete, fix ready.',
+          },
+        ],
+      },
+      {
+        role: 'assistant',
+        content:
+          "First, the impact. The right products still exist — the zero-result rate is flat — they're just ranking lower. This is a scoring problem, not a coverage gap. Adjacent segments (earbuds, speakers) are not affected.",
+        attachments: [
+          {
+            type: 'stats-display',
+            title: 'Impact (vs 7-day baseline)',
+            stats: [
+              { label: 'nDCG@10', value: '0.64', color: 'danger' },
+              { label: 'Click-through (p1)', value: '11%', color: 'danger' },
+              { label: 'Abandon rate', value: '29%', color: 'danger' },
+              { label: 'Zero-result rate', value: '0.8%', color: 'success' },
+            ],
           },
           {
-            type: 'chart',
-            chartType: 'line',
-            title: 'Metric: payment-service P99 latency',
-            threshold: 2000,
-            breachRange: { x0: 4, x1: 6, y0: 2000 },
-            data: [
-              { x: 0, y: 120 },
-              { x: 1, y: 135 },
-              { x: 2, y: 180 },
-              { x: 3, y: 420 },
-              { x: 4, y: 1100 },
-              { x: 5, y: 2050 },
-              { x: 6, y: 2340 },
+            type: 'data-table',
+            title: 'Segment impact',
+            columns: ['Metric', 'Baseline', 'Now', 'Change'],
+            rows: [
+              ['nDCG@10', '0.78', '0.64', '▼ -18%'],
+              ['Click-through (p1)', '24%', '11%', '▼ -13pp'],
+              ['Abandon rate', '15%', '29%', '▲ +14pp'],
+              ['Zero-result rate', '0.8%', '0.8%', '— no change'],
             ],
           },
         ],
@@ -100,53 +115,112 @@ const THREADS = {
       {
         role: 'assistant',
         content:
-          'Based on the timing and pattern, I have two hypotheses:\n\n**Hypothesis 1: Downstream dependency bottleneck**\n\nThe latency spike correlates with elevated connection wait times to the inventory service, which started returning slower responses around 14:20 UTC.',
-        attachment: {
-          type: 'link-preview',
-          key: 'notebooks',
-          title: 'Inventory service dependency analysis',
-          description:
-            'Connection pool saturation, response time degradation, and queue depth trends for the inventory service over the last 4 hours.',
-        },
+          'I correlated the onset with recent system events. The pattern is clear: a deploy at 12:08 triggered a reindex at 12:10, and the decline began at 12:15. The reindex is the inflection point.',
+        attachments: [
+          {
+            type: 'data-table',
+            title: 'Timeline of events',
+            columns: ['Time', 'Event', 'Correlation'],
+            rows: [
+              ['12:08', 'Deploy: search-indexer v2.14.3 (update schema mappings)', 'HIGH'],
+              ['12:10', 'Reindex job: index-v46 → index-v47', 'HIGH'],
+              ['12:15', 'nDCG decline begins', 'onset'],
+              ['11:45', 'Deploy: search-api v3.8.1', 'LOW'],
+              ['09:00', 'Catalog update: +1,200 products', 'LOW'],
+            ],
+          },
+        ],
       },
       {
         role: 'assistant',
         content:
-          "**Hypothesis 2: Connection pool exhaustion**\n\nThe payment service's outbound connection pool is at 98% utilization. Requests are queuing rather than failing fast, which inflates P99 without raising error rates. This would explain why error rates look normal while latency is spiking.",
-        attachment: {
-          type: 'link-preview',
-          key: 'notebooks',
-          title: 'Payment service connection pool metrics',
-          description:
-            'Pool utilization, acquire wait time, and active connection count for the payment service over the last 4 hours.',
-        },
+          'Confirmed root cause (92% confidence): the reindex built index-v47 without the custom analyzer on the "features" field. Without it, terms like "noise cancelling" no longer tokenize into matchable tokens, so strong products lose about 31% of their score.',
+        attachments: [
+          {
+            type: 'code-block',
+            title: 'Mapping diff — features field (v46 → v47)',
+            language: 'json',
+            code: `// index-v46 (before)
+"features": {
+  "type": "text",
+  "analyzer": "product_features_analyzer"
+}
+
+// index-v47 (after) — analyzer dropped
+"features": {
+  "type": "text"
+}`,
+          },
+          {
+            type: 'link-preview',
+            key: 'notebooks',
+            title: 'Scoring comparison — Sony WH-1000XM5',
+            description:
+              'Side-by-side _explain output for the same query and document on index-v46 vs index-v47.',
+          },
+        ],
       },
       {
         role: 'assistant',
         content:
-          'Here are the recommended next steps to confirm and mitigate:\n\n1. Check the inventory service connection pool configuration.\n2. Increase the pool max from 50 to 150 to relieve backpressure.\n3. Enable circuit breaker on the payment→inventory call path.\n\nI have prepared a script to apply the connection pool fix:',
-        attachment: {
-          type: 'code-block',
-          title: 'apply-fix.sh',
-          language: 'bash',
-          code: `#!/bin/bash
-# Patch payment-service connection pool and restart
+          'Here is the _explain output for the same query and document on both indexes. In v47 the "features" field scores 0.00 — "noise cancelling" no longer matches the indexed form. That single field drops the product from #1 to #7.',
+        attachments: [
+          {
+            type: 'code-block',
+            title: '_explain: index-v46 vs index-v47',
+            language: 'text',
+            code: `index-v46 (before) — total 14.82
+  title    "wireless headphones"   x2.5  ->  6.25
+  features "noise cancelling"      x1.5  ->  4.57
+  description "wireless"           x1.0  ->  2.10
+  popularity signal                      ->  1.90
 
-kubectl patch configmap payment-service-config \\
-  -n production \\
-  --type merge \\
-  -p '{"data":{"POOL_MAX_CONNECTIONS":"150","POOL_ACQUIRE_TIMEOUT":"5s"}}'
+index-v47 (after) — total 10.25
+  title    "wireless headphones"   x2.5  ->  6.25
+  features "noise cancelling"      x1.5  ->  0.00   (MISS)
+  description "wireless"           x1.0  ->  2.10
+  popularity signal                      ->  1.90
 
-kubectl rollout restart deployment/payment-service -n production
-kubectl rollout status deployment/payment-service -n production --timeout=120s
-
-echo "Done. Monitoring P99 latency for recovery..."`,
-        },
+Score delta: -4.57 (31%)   ·   Position: #1 -> #7`,
+          },
+        ],
       },
       {
         role: 'assistant',
         content:
-          '**Summary**\n\nPayment-service P99 latency breached 2,000ms due to connection pool exhaustion on 3 of 4 pods. The outbound pool hit 98% utilization, causing requests to queue rather than fail fast. No recent deployments contributed. Root cause: pool max of 50 connections was insufficient under current load. Fix applied: pool max increased to 150 with a 5s acquire timeout, and pods restarted. Latency is expected to recover within 2–3 minutes.',
+          'I evaluated three options and shadow-tested the top one. Recommended two-phase fix:\n\n**Phase 1 — Immediate (low risk).** Boost the "description" field 1.0 → 1.8 for this segment. Recovers ~67% of the loss right away.\n\n**Phase 2 — Full fix (~45 min).** Reindex with the correct analyzer and do a zero-downtime alias swap for full recovery.',
+        attachments: [
+          {
+            type: 'data-table',
+            title: 'Shadow validation (Phase 1) — "best wireless headphones 2024"',
+            columns: ['Rank', 'Before fix', 'After fix'],
+            rows: [
+              ['#1', 'Generic BT Earbuds', 'Sony WH-1000XM5'],
+              ['#2', 'No-brand Headset', 'Bose QC Ultra'],
+              ['nDCG@10', '0.64', '0.72 (simulated)'],
+            ],
+          },
+          {
+            type: 'code-block',
+            title: 'Apply Phase 1 (5% canary)',
+            language: 'bash',
+            code: `# Phase 1 — boost "description" field 1.0 -> 1.8
+# Scope: audio/headphones/wireless · deploy to 5% canary
+# Auto-rollback if nDCG drops >2% after apply
+
+osd search-relevance update-template product_search_v3 \\
+  --field-boost description=1.8 \\
+  --scope "audio/headphones/wireless" \\
+  --canary 5`,
+          },
+          {
+            type: 'link-preview',
+            key: 'metrics',
+            title: 'Fix proposal & canary dashboard',
+            description:
+              'Phase 1 / Phase 2 plan, shadow-test results, and live canary health for the wireless-headphones segment.',
+          },
+        ],
       },
     ],
   },
@@ -1316,161 +1390,57 @@ const SCRIPTED_RESPONSES = {
     },
   },
   'latency-spike': {
-    logs: {
-      id: 'logs',
-      match: /log/i,
+    outcome: {
+      id: 'outcome',
+      match: /apply|approve|phase 1|go ahead|do it|proceed|fix/i,
       tasks: [
         {
-          label: 'Querying payment service logs',
-          description: 'Filtering last 30 minutes by service=payment',
+          label: 'Applying Phase 1 fix',
+          description: 'Updating description boost to 1.8 for the segment',
         },
         {
-          label: 'Analyzing slow-log entries',
-          description: 'Grouping entries by message pattern and severity',
+          label: 'Promoting canary to 100%',
+          description: 'Canary passed all gates — promoting to full traffic',
         },
       ],
       content:
-        'I analyzed the last 30 minutes of payment service logs. I created a query to filter for timeout events:\n\n- No 5xx errors from the payment service itself — error rates are clean.\n- 847 slow-log entries (>1s) all show "connection acquire timeout" as the bottleneck.\n- No upstream dependency errors from inventory service.\n\nThe logs point toward connection pool starvation rather than a downstream failure.',
+        'Phase 1 is applied and promoted to 100%. Relevancy for "wireless headphones" is recovering.\n\nPhase 2 (reindex with the correct analyzer) is still pending — the interim boost recovers about 84% of the loss, but full recovery needs the reindex.',
       attachments: [
         {
-          type: 'code-block',
-          title: 'Payment service timeout query',
-          language: 'sql',
-          code:
-            'source=opensearch_metrics_payment_service | where level="WARN" OR message LIKE "%timeout%" | sort -timestamp | head 25',
+          type: 'chart',
+          chartType: 'line',
+          title: 'nDCG@10 recovery',
+          threshold: 0.78,
+          data: [
+            { x: 0, y: 0.78 },
+            { x: 1, y: 0.78 },
+            { x: 2, y: 0.71 },
+            { x: 3, y: 0.64 },
+            { x: 4, y: 0.64 },
+            { x: 5, y: 0.7 },
+            { x: 6, y: 0.74 },
+          ],
         },
         {
-          type: 'link-preview',
-          title: 'Payment service logs — last 30 minutes',
-          description:
-            'Filtered log results showing slow-log entries, error distribution, and connection timeout events for the payment service.',
+          type: 'stats-display',
+          title: 'Results (30 min post-promotion)',
+          stats: [
+            { label: 'nDCG@10', value: '0.74', color: 'success' },
+            { label: 'Click-through (p1)', value: '22%', color: 'success' },
+            { label: 'Abandon rate', value: '17%', color: 'success' },
+            { label: 'Avg click position', value: '2.8', color: 'success' },
+          ],
         },
         {
           type: 'data-table',
-          title: 'Log Summary (last 30m)',
-          columns: ['Level', 'Count', 'Top Message'],
+          title: 'Before vs after fix',
+          columns: ['Metric', 'Before fix', 'After fix', 'Recovery'],
           rows: [
-            ['WARN', '847', 'connection acquire timeout exceeded 1000ms'],
-            ['INFO', '12,340', 'request completed successfully'],
-            ['ERROR', '0', '—'],
-            ['DEBUG', '3,210', 'pool checkout attempt'],
+            ['nDCG@10', '0.64', '0.74', '▲ +16%'],
+            ['Click-through (p1)', '11%', '22%', '▲ +11pp'],
+            ['Abandon rate', '29%', '17%', '▼ -12pp'],
+            ['Avg click position', '6.2', '2.8', '▲ improved'],
           ],
-        },
-      ],
-    },
-    traces: {
-      id: 'traces',
-      match: /trace|span/i,
-      tasks: [
-        {
-          label: 'Sampling recent traces',
-          description: 'Collecting 200 traces from the last 15 minutes',
-        },
-        {
-          label: 'Analyzing span durations',
-          description: 'Breaking down latency by span across the call chain',
-        },
-      ],
-      content:
-        'I sampled 200 traces from the last 15 minutes. Here is the span breakdown:\n\n- Average span duration for payment→inventory calls is 45ms (normal).\n- However, the acquire_connection span preceding it averages 1,840ms — this is where the latency is hiding.',
-      attachments: [
-        {
-          type: 'link-preview',
-          title: 'Payment service traces — sampled spans',
-          description:
-            'Trace waterfall view showing acquire_connection bottleneck across sampled requests for the payment service.',
-        },
-        {
-          type: 'data-table',
-          title: 'Trace Span Breakdown',
-          columns: ['Span Name', 'Avg Duration', 'P99'],
-          rows: [
-            ['acquire_connection', '1,840ms', '2,320ms'],
-            ['payment→inventory', '45ms', '82ms'],
-            ['serialize_response', '3ms', '8ms'],
-            ['total_request', '1,920ms', '2,410ms'],
-          ],
-        },
-      ],
-    },
-    fix: {
-      id: 'fix',
-      match: /fix|suggest/i,
-      tasks: [
-        {
-          label: 'Generating fix script',
-          description: 'Building kubectl patch commands for connection pool',
-        },
-        {
-          label: 'Validating configuration',
-          description: 'Checking values against cluster resource limits',
-        },
-      ],
-      content:
-        'I have updated the fix to target the confirmed root cause. The script increases the connection pool ceiling, adds acquire timeout protection, and enables a circuit breaker to prevent future queue buildup:',
-      attachment: {
-        type: 'code-block',
-        title: 'apply-fix.sh',
-        language: 'bash',
-        code: `#!/bin/bash
-# Fix: increase connection pool + enable circuit breaker
-
-# 1. Patch connection pool settings
-kubectl patch configmap payment-service-config \\
-  -n production \\
-  --type merge \\
-  -p '{"data":{
-    "POOL_MAX_CONNECTIONS":"150",
-    "POOL_MIN_IDLE":"20",
-    "POOL_ACQUIRE_TIMEOUT":"3s",
-    "CIRCUIT_BREAKER_ENABLED":"true",
-    "CIRCUIT_BREAKER_THRESHOLD":"50",
-    "CIRCUIT_BREAKER_RECOVERY":"30s"
-  }}'
-
-# 2. Rolling restart
-kubectl rollout restart deployment/payment-service -n production
-kubectl rollout status deployment/payment-service -n production --timeout=120s
-
-# 3. Verify recovery
-sleep 30
-echo "Checking P99 latency post-fix..."
-kubectl exec -n production deploy/payment-service -- \\
-  curl -s localhost:9090/metrics | grep 'http_request_duration_p99'`,
-      },
-    },
-    dashboard: {
-      id: 'dashboard',
-      match: /dashboard/i,
-      tasks: [
-        {
-          label: 'Creating dashboard',
-          description:
-            'Generating panels for connection pool and latency metrics',
-        },
-        {
-          label: 'Configuring data sources',
-          description: 'Linking payment service metrics and alert thresholds',
-        },
-      ],
-      content:
-        'I have created a monitoring dashboard for the payment service connection pool. It includes panels for pool utilization, acquire wait time, active connections, and P99 latency with alert thresholds configured:',
-      attachments: [
-        {
-          type: 'item-carousel',
-          title: 'Dashboard panels',
-          items: [
-            { label: 'Pool utilization', value: '98%', color: 'danger' },
-            { label: 'Acquire wait (P95)', value: '1,840ms', color: 'danger' },
-            { label: 'Active connections', value: '50/50', color: 'accent' },
-            { label: 'Circuit breaker', value: 'OFF', color: 'subdued' },
-          ],
-        },
-        {
-          type: 'link-preview',
-          title: 'Payment service — connection pool dashboard',
-          description:
-            'Live dashboard with pool utilization, acquire wait time, active connections, circuit breaker status, and P99 latency for the payment service.',
         },
       ],
     },
@@ -2205,27 +2175,12 @@ export const ThreadPage = ({
                 } else {
                   prompts = ['Yes, check the trace data'];
                 }
-              } else if (done.has('dashboard')) {
-                prompts = [];
-              } else if (done.has('fix')) {
-                prompts = ['Set up a monitoring dashboard for this service'];
-              } else if (done.has('conclusion')) {
-                prompts = ['Suggest a fix for this issue'];
-              } else if (done.has('logs') && !done.has('traces')) {
-                prompts = [
-                  'Analyze the trace spans for the payment service',
-                  'Suggest a fix for this issue',
-                ];
-              } else if (done.has('traces') && !done.has('logs')) {
-                prompts = [
-                  'Show me the recent logs for the payment service',
-                  'Suggest a fix for this issue',
-                ];
-              } else if (!done.has('logs') && !done.has('traces')) {
-                prompts = [
-                  'Show me the recent logs for the payment service',
-                  'Analyze the trace spans for the payment service',
-                ];
+              } else if (effectiveScriptedKey === 'latency-spike') {
+                if (done.has('outcome')) {
+                  prompts = [];
+                } else {
+                  prompts = ['Apply Phase 1 fix'];
+                }
               }
               if (prompts.length === 0) return null;
               return (

@@ -465,7 +465,7 @@ const TabbedPanel = ({ tabs, activeTab, onTabChange, children }) => (
 export const DEFAULT_THREADS = [
   {
     key: 'latency-spike',
-    title: 'Latency spike investigation',
+    title: 'Relevancy degradation — wireless headphones',
     subtitle: 'Use for investigation demo · 2 hours ago',
   },
   {
@@ -1011,7 +1011,7 @@ const ThreadPopoverContent = ({ onNavigate, onViewAll }) => {
   const items = [
     {
       key: 'latency-spike',
-      title: 'Latency spike investigation',
+      title: 'Relevancy degradation — wireless headphones',
       subtitle: 'Use for investigation demo · 2 hours ago',
     },
     {

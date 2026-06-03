@@ -538,7 +538,7 @@ export const SamplePagesView = () => {
       items: [
         {
           key: 'latency-spike',
-          title: 'Latency spike investigation',
+          title: 'Relevancy degradation — wireless headphones',
           subtitle: 'Use for investigation demo · 2 hours ago',
         },
         {

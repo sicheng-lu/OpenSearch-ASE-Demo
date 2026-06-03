@@ -35,7 +35,7 @@ const SEARCH_SECTIONS = [
     items: [
       {
         key: 'latency-spike',
-        label: 'Latency spike investigation',
+        label: 'Relevancy degradation — wireless headphones',
         subtitle: 'Sarah Lee · 2 hours ago',
       },
       {

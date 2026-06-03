@@ -180,6 +180,144 @@ export const AlertPageMock = () => (
   </div>
 );
 
+// Relevancy degradation alert page mock — nDCG@10 drop for "wireless headphones"
+export const RelevancyAlertPageMock = () => (
+  <div className="mockCanvasPage">
+    <OuiFlexGroup gutterSize="m" responsive={false}>
+      <OuiFlexItem>
+        <OuiPanel paddingSize="m" hasShadow={false} hasBorder>
+          <OuiText size="m" color="danger">
+            <strong>0.64</strong>
+          </OuiText>
+          <OuiText size="xs" color="subdued">
+            nDCG@10 (baseline 0.78)
+          </OuiText>
+        </OuiPanel>
+      </OuiFlexItem>
+      <OuiFlexItem>
+        <OuiPanel paddingSize="m" hasShadow={false} hasBorder>
+          <OuiText size="m" color="danger">
+            <strong>▼ 18%</strong>
+          </OuiText>
+          <OuiText size="xs" color="subdued">
+            vs 7-day baseline
+          </OuiText>
+        </OuiPanel>
+      </OuiFlexItem>
+      <OuiFlexItem>
+        <OuiPanel paddingSize="m" hasShadow={false} hasBorder>
+          <OuiText size="m">
+            <strong>142 variants</strong>
+          </OuiText>
+          <OuiText size="xs" color="subdued">
+            ~3,200 searches/hr
+          </OuiText>
+        </OuiPanel>
+      </OuiFlexItem>
+      <OuiFlexItem>
+        <OuiPanel paddingSize="m" hasShadow={false} hasBorder>
+          <OuiText size="m">
+            <strong>2h 19m</strong>
+          </OuiText>
+          <OuiText size="xs" color="subdued">
+            since 12:15 PM
+          </OuiText>
+        </OuiPanel>
+      </OuiFlexItem>
+    </OuiFlexGroup>
+
+    <OuiSpacer size="m" />
+
+    <OuiPanel paddingSize="m" hasShadow={false} hasBorder>
+      <OuiText size="xs">
+        <strong>Metric: nDCG@10 — &ldquo;wireless headphones&rdquo;</strong>
+      </OuiText>
+      <OuiSpacer size="s" />
+      <div style={{ height: 160 }}>
+        <Chart>
+          <Settings showLegend={false} />
+          <Axis id="bottom" position="bottom" showGridLines={false} />
+          <Axis
+            id="left"
+            position="left"
+            showGridLines
+            tickFormat={(d) => d.toFixed(2)}
+          />
+          <LineSeries
+            id="ndcg"
+            xScaleType={ScaleType.Linear}
+            yScaleType={ScaleType.Linear}
+            xAccessor="x"
+            yAccessors={['y']}
+            data={[
+              { x: 0, y: 0.78 },
+              { x: 1, y: 0.78 },
+              { x: 2, y: 0.77 },
+              { x: 3, y: 0.7 },
+              { x: 4, y: 0.66 },
+              { x: 5, y: 0.64 },
+              { x: 6, y: 0.64 },
+            ]}
+          />
+          <LineAnnotation
+            id="baseline"
+            domainType={AnnotationDomainType.YDomain}
+            dataValues={[{ dataValue: 0.78 }]}
+            style={{
+              line: { stroke: '#FF6467', strokeWidth: 2, dash: [4, 4] },
+            }}
+          />
+          <RectAnnotation
+            id="breach"
+            dataValues={[{ coordinates: { x0: 3, x1: 6, y0: 0, y1: 0.78 } }]}
+            style={{ fill: '#FF6467', opacity: 0.05 }}
+          />
+        </Chart>
+      </div>
+    </OuiPanel>
+
+    <OuiSpacer size="m" />
+
+    <div className="mockAlertCallout">
+      <OuiIcon type="alert" color="warning" size="m" />
+      <OuiText size="s">
+        Alarm triggered at 12:34 PM UTC — nDCG@10 for the
+        audio/headphones/wireless segment dropped 18% below the 7-day baseline.
+      </OuiText>
+    </div>
+
+    <OuiSpacer size="m" />
+
+    <OuiText size="s">
+      <h4>Summary</h4>
+      <p>
+        Search relevancy for &ldquo;wireless headphones&rdquo; degraded across
+        142 query variants (~3,200 searches/hr). Zero-result rate is flat, so
+        documents exist but are ranking lower — a scoring issue, not a coverage
+        gap. Adjacent segments (earbuds, speakers) are unaffected.
+      </p>
+      <h4>Recommendation</h4>
+      <ul>
+        <li>
+          Correlate the onset (12:15 PM) with recent deploys and reindex jobs.
+        </li>
+        <li>
+          Compare field-level scoring (_explain) between the current and prior
+          index versions.
+        </li>
+        <li>
+          Verify analyzer and mapping configuration on text fields used for
+          ranking.
+        </li>
+        <li>
+          Apply an interim field-boost to recover relevancy while a full fix is
+          prepared.
+        </li>
+      </ul>
+    </OuiText>
+  </div>
+);
+
 // Markdown note page mock — Inventory service dependency analysis
 export const InventoryAnalysisPageMock = () => (
   <div className="mockCanvasPage">
