@@ -24,14 +24,16 @@ import {
 } from '../../../../src/components';
 
 // ─────────────────────────────────────────────
-// MOCK DATA — two ranked result sets for "laptop"
+// MOCK DATA — two ranked result sets for "wireless headphones"
 // Each item has a stable `id` so we can match the same document across the two
-// lists and draw connector lines showing how its rank moved.
+// lists and draw connector lines showing how its rank moved. Query 1 is the
+// post-reindex baseline (analyzer dropped on the features field); Query 2 is
+// the Phase 1 interim fix (description boost 1.8) that recovers ~84% of the loss.
 // ─────────────────────────────────────────────
 
 const INDEX_OPTIONS = [
-  { value: 'ecommerce', text: 'ecommerce' },
-  { value: 'products', text: 'products' },
+  { value: 'products-v47', text: 'products-v47' },
+  { value: 'products-v46', text: 'products-v46' },
   { value: 'catalog', text: 'catalog' },
 ];
 
@@ -41,67 +43,60 @@ const PIPELINE_OPTIONS = [
   { value: 'rerank-pipeline', text: 'rerank-pipeline' },
 ];
 
+// Query 1 — baseline (post-reindex). index-v47 dropped the custom analyzer on
+// the features field, so plain matching buries the real products under
+// accessories and spare parts.
 const QUERY_1_DSL = `{
   "query": {
     "multi_match": {
       "query": "%SearchText%",
-      "fields": ["id", "title", "category", "bullet_points", "description", "brand"]
+      "fields": ["title", "brand", "category", "features", "description"]
     }
   },
-  "_source": ["id", "title", "category", "brand", "image"]
+  "_source": ["id", "title", "brand", "category", "image"]
 }`;
 
+// Query 2 — Phase 1 interim fix. A description boost of 1.8 on the affected
+// segment lifts the real headphones back toward the top while the proper
+// reindex (Phase 2) is still pending.
 const QUERY_2_DSL = `{
   "query": {
-    "hybrid": {
-      "queries": [
-        {
-          "multi_match": {
-            "query": "%SearchText%",
-            "fields": ["id", "title", "category", "bullet_points", "description"]
-          }
-        },
-        {
-          "neural": {
-            "title_embedding": {
-              "query_text": "%SearchText%",
-              "model_id": "all-MiniLM-L6-v2",
-              "k": 10
-            }
-          }
-        }
-      ]
+    "multi_match": {
+      "query": "%SearchText%",
+      "fields": ["title^2", "brand", "category", "features", "description^1.8"]
     }
   },
-  "_source": ["id", "title", "category", "brand", "image"]
+  "_source": ["id", "title", "brand", "category", "image"]
 }`;
 
-// Result 1 — plain multi_match (keyword) ranking
+// Result 1 — baseline ranking (before fix). Accessories and spare parts rank
+// above the actual wireless headphones, which are buried down the list.
 const RESULT_1 = [
-  { id: 'd1', title: 'RiwiR Laptop Desk Pink Foldable Lap Desk...' },
-  { id: 'd2', title: 'Alapmk Protective Case Cover for 11.6" S...' },
-  { id: 'd3', title: 'Foldable Bed Table for Laptop, Laptop De...' },
-  { id: 'd4', title: 'Kinmac 360° Protective Waterproof Laptop...' },
-  { id: 'd5', title: 'Bed Desk with Drawer, Phone and Cup Hold...' },
-  { id: 'd6', title: 'Mount-It! Laptop Desk Stand Mount | Arti...' },
-  { id: 'd7', title: 'Osprey Nebula Men\u2019s Laptop Backpack, Bla...' },
-  { id: 'd8', title: 'Cooling Pad for Laptop, 5 Quiet Fans...' },
-  { id: 'd9', title: 'Laptop Sleeve Case 13-13.3 inch, Water R...' },
-  { id: 'd10', title: 'Adjustable Laptop Stand for Desk, Ergono...' },
+  { id: 'd1', title: 'Replacement Ear Pad Cushions for Wireless Headphones...' },
+  { id: 'd2', title: 'Hard Carrying Case for Wireless Headphones, Travel...' },
+  { id: 'd3', title: 'Aluminum Headphone Stand Holder for Wireless Heads...' },
+  { id: 'd4', title: 'Sony WH-1000XM4 Wireless Noise Cancelling Headphon...' },
+  { id: 'd5', title: 'Bluetooth Audio Transmitter Adapter for Headphones...' },
+  { id: 'd6', title: 'JBL Tune 510BT Wireless On-Ear Headphones...' },
+  { id: 'd7', title: '3.5mm AUX Audio Cable for Wireless Headphones...' },
+  { id: 'd8', title: 'Bose QuietComfort 45 Wireless Bluetooth Headphones...' },
+  { id: 'd9', title: 'USB-C Charging Cable for Wireless Headphones, 2-Pa...' },
+  { id: 'd10', title: 'Memory Foam Ear Tips for Wireless Earbuds...' },
 ];
 
-// Result 2 — hybrid + normalization ranking (re-ordered, some new docs)
+// Result 2 — interim-boost ranking (after Phase 1 fix). The real wireless
+// headphones recover to the top; the demoted accessory (d1) drops down.
 const RESULT_2 = [
-  { id: 'n1', title: 'Lenovo Chromebook C330 2-in-1 Convertibl...' },
-  { id: 'd1', title: 'RiwiR Laptop Desk Pink Foldable Lap Desk...' },
-  { id: 'n2', title: 'HP Stream 14-inch Laptop, AMD Dual-Core ...' },
-  { id: 'd2', title: 'Alapmk Protective Case Cover for 11.6" S...' },
-  { id: 'n3', title: 'HP Stream 14-inch Laptop, Intel Celeron ...' },
-  { id: 'n4', title: 'Laptop HP X360 14a Chromebook 14" HD Tou...' },
-  { id: 'd3', title: 'Foldable Bed Table for Laptop, Laptop De...' },
-  { id: 'd4', title: 'Kinmac 360° Protective Waterproof Laptop...' },
-  { id: 'n5', title: 'ASUS VivoBook 15 Thin and Light Laptop...' },
-  { id: 'd6', title: 'Mount-It! Laptop Desk Stand Mount | Arti...' },
+  { id: 'n1', title: 'Sony WH-1000XM5 Wireless Noise Cancelling Headphon...' },
+  { id: 'd4', title: 'Sony WH-1000XM4 Wireless Noise Cancelling Headphon...' },
+  { id: 'n2', title: 'Apple AirPods Max Wireless Over-Ear Headphones...' },
+  { id: 'd8', title: 'Bose QuietComfort 45 Wireless Bluetooth Headphones...' },
+  { id: 'n3', title: 'Beats Studio3 Wireless Noise Cancelling Headphones...' },
+  { id: 'd6', title: 'JBL Tune 510BT Wireless On-Ear Headphones...' },
+  { id: 'n4', title: 'Sennheiser Momentum 4 Wireless Headphones...' },
+  { id: 'n5', title: 'Anker Soundcore Life Q30 Wireless Headphones...' },
+  { id: 'd1', title: 'Replacement Ear Pad Cushions for Wireless Headphones...' },
+  { id: 'n6', title: 'Audio-Technica ATH-M50xBT2 Wireless Headphones...' },
 ];
 
 const DISPLAY_FIELD_OPTIONS = [
@@ -220,12 +215,12 @@ const OverlapBar = ({ leftUnique, common, rightUnique }) => (
 export const QuerySetComparisonPage = ({ initialMode = 'empty' }) => {
   const filled = initialMode === 'filled';
 
-  const [searchText, setSearchText] = useState(filled ? 'laptop' : '');
-  const [submittedText, setSubmittedText] = useState(filled ? 'laptop' : '');
-  const [index1, setIndex1] = useState(filled ? 'ecommerce' : '');
+  const [searchText, setSearchText] = useState(filled ? 'wireless headphones' : '');
+  const [submittedText, setSubmittedText] = useState(filled ? 'wireless headphones' : '');
+  const [index1, setIndex1] = useState(filled ? 'products-v47' : '');
   const [pipeline1, setPipeline1] = useState('');
-  const [index2, setIndex2] = useState(filled ? 'ecommerce' : '');
-  const [pipeline2, setPipeline2] = useState(filled ? 'normalization-pipeline' : '');
+  const [index2, setIndex2] = useState(filled ? 'products-v47' : '');
+  const [pipeline2, setPipeline2] = useState('');
   const [query1, setQuery1] = useState(filled ? QUERY_1_DSL : '');
   const [query2, setQuery2] = useState(filled ? QUERY_2_DSL : '');
   const [displayField, setDisplayField] = useState('title');
@@ -276,13 +271,12 @@ export const QuerySetComparisonPage = ({ initialMode = 'empty' }) => {
   // search loads the pre-baked "filled" scenario — turning the empty state
   // into the populated side-by-side comparison.
   const handleSearch = () => {
-    const text = searchText.trim() || 'laptop';
+    const text = searchText.trim() || 'wireless headphones';
     setSearchText(text);
     setSubmittedText(text);
     // Seed the query config if the user hasn't set it up themselves.
-    if (!index1) setIndex1('ecommerce');
-    if (!index2) setIndex2('ecommerce');
-    if (!pipeline2) setPipeline2('normalization-pipeline');
+    if (!index1) setIndex1('products-v47');
+    if (!index2) setIndex2('products-v47');
     if (!query1) setQuery1(QUERY_1_DSL);
     if (!query2) setQuery2(QUERY_2_DSL);
     setResult1(RESULT_1);

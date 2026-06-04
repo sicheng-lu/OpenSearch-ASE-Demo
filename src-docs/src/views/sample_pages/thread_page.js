@@ -1407,13 +1407,6 @@ const SCRIPTED_RESPONSES = {
         'Phase 1 is applied and promoted to 100%. Relevancy for "wireless headphones" is recovering.\n\nPhase 2 (reindex with the correct analyzer) is still pending — the interim boost recovers about 84% of the loss, but full recovery needs the reindex.',
       attachments: [
         {
-          type: 'link-preview',
-          key: 'query-set-comparison-filled',
-          title: 'Query set comparison — before vs after fix',
-          description:
-            'Side-by-side ranking for "wireless headphones": baseline query vs the interim-boost query, with per-document rank changes and result overlap.',
-        },
-        {
           type: 'chart',
           chartType: 'line',
           title: 'nDCG@10 recovery',
@@ -1448,6 +1441,31 @@ const SCRIPTED_RESPONSES = {
             ['Abandon rate', '29%', '17%', '▼ -12pp'],
             ['Avg click position', '6.2', '2.8', '▲ improved'],
           ],
+        },
+      ],
+    },
+    verify: {
+      id: 'verify',
+      match: /test|try|run|query|compare|verify|check.*search/i,
+      tasks: [
+        {
+          label: 'Running "wireless headphones"',
+          description: 'Executing baseline and interim-boost queries side by side',
+        },
+        {
+          label: 'Diffing the result sets',
+          description: 'Matching documents and scoring rank changes',
+        },
+      ],
+      content:
+        'I ran "wireless headphones" against both the baseline query and the interim-boost query so you can see the change directly. The boosted query lifts the right products back toward the top — most of the previously buried items return to the first page. Open the comparison to inspect per-document rank changes and where the two result sets still differ.',
+      attachments: [
+        {
+          type: 'link-preview',
+          key: 'query-set-comparison-filled',
+          title: 'Query set comparison — before vs after fix',
+          description:
+            'Side-by-side ranking for "wireless headphones": baseline query vs the interim-boost query, with per-document rank changes and result overlap.',
         },
       ],
     },
@@ -2183,8 +2201,10 @@ export const ThreadPage = ({
                   prompts = ['Yes, check the trace data'];
                 }
               } else if (effectiveScriptedKey === 'latency-spike') {
-                if (done.has('outcome')) {
+                if (done.has('verify')) {
                   prompts = [];
+                } else if (done.has('outcome')) {
+                  prompts = ['Test out the "wireless headphones" query'];
                 } else {
                   prompts = ['Apply Phase 1 fix'];
                 }
